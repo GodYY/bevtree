@@ -1,26 +1,29 @@
 package bevtree
 
-import "fmt"
+import (
+	"log"
+)
 
-type Behavior interface {
-	OnStart(*Env)
+type Bev interface {
+	OnInit(*Env)
 	OnUpdate(*Env) Result
-	OnEnd(*Env)
-	OnStop(*Env)
+	OnTerminate(*Env)
+}
+
+type BevDefiner interface {
+	CreateBev() Bev
 }
 
 type BevNode struct {
 	nodeBase
-	bev Behavior
+	bev BevDefiner
 }
 
-func NewBehavior(bev Behavior) *BevNode {
-	if bev == nil {
-		panic("nil behavior")
-	}
+func NewBev(bevDef BevDefiner) *BevNode {
+	assertNilArg(bevDef, "bevDef")
 
 	return &BevNode{
-		bev: bev,
+		bev: bevDef,
 	}
 }
 
@@ -34,56 +37,105 @@ func (BevNode) MoveChildAfter(_, _ node)  {}
 func (BevNode) FirstChild() node          { return nil }
 func (BevNode) LastChild() node           { return nil }
 
-func (BevNode) isBehavior() bool { return true }
+func (b *BevNode) createTask(parent task) task {
+	return newBevTask(b, parent, b.bev.CreateBev())
+}
 
-func (n *BevNode) update(e *Env) Result {
-	n.latestUpdateSeri = e.getUpdateSeri()
+func (b *BevNode) destroyTask(t task) {}
 
-	if n.status != sRunning {
-		n.bev.OnStart(e)
+type bevTask struct {
+	taskBase
+	bev Bev
+}
+
+func newBevTask(node *BevNode, parent task, bev Bev) *bevTask {
+	assertNilArg(bev, "bev")
+
+	t := &bevTask{
+		bev:      bev,
+		taskBase: newTask(node, parent),
 	}
 
-	if n.lzStop == lzsBeforeUpdate {
-		return n.doLazyStop(e)
+	return t
+}
+
+func (t *bevTask) isBehavior() bool { return true }
+
+func (t *bevTask) update(e *Env) Result {
+	st := t.getStatus()
+
+	if debug {
+		assert(st != sDestroyed, "bevTask already destroyed")
 	}
 
-	result := n.bev.OnUpdate(e)
+	// update seri.
+	t.latestUpdateSeri = e.getUpdateSeri()
 
-	if n.lzStop == lzsAfterUpdate {
-		return n.doLazyStop(e)
+	lzStop := t.getLZStop()
+
+	// lazy stop before update.
+	if lzStop == lzsBeforeUpdate {
+		return t.doLazyStop(e)
+	}
+
+	// init.
+	if st != sRunning {
+		t.bev.OnInit(e)
+	}
+
+	// update.
+	result := t.bev.OnUpdate(e)
+
+	// lazy stop after update.
+	if lzStop == lzsAfterUpdate {
+		return t.doLazyStop(e)
 	}
 
 	if result == RRunning {
-		n.status = sRunning
+		t.setStatus(sRunning)
 	} else {
-		n.bev.OnEnd(e)
-		n.status = sNone
+		// terminate.
+		t.bev.OnTerminate(e)
+		t.setStatus(sNone)
 	}
 
 	return result
-
 }
 
-func (n *BevNode) stop(e *Env) {
-	if n.status == sNone || n.status == sStopped {
+func (t *bevTask) stop(e *Env) {
+	if !t.isRunning() {
 		return
 	}
 
-	n.bev.OnStop(e)
-	n.bev.OnEnd(e)
-	n.status = sStopped
-	n.lzStop = lzsNone
+	t.bev.OnTerminate(e)
+	t.setStatus(sStopped)
+	t.setLZStop(lzsNone)
 }
 
-func (n *BevNode) doLazyStop(e *Env) Result {
-	fmt.Println("behavior doLazyStop", n.lzStop)
-	n.bev.OnStop(e)
-	n.bev.OnEnd(e)
-	n.status = sStopped
-	n.lzStop = lzsNone
+func (t *bevTask) doLazyStop(e *Env) Result {
+	if debug {
+		log.Println("bevTask.doLazyStop", t.getLZStop())
+	}
+
+	t.stop(e)
 	return RFailure
 }
 
-func (n *BevNode) childOver(node, Result, *Env) Result {
+func (t *bevTask) childOver(_ task, _ Result, _ *Env) Result {
 	panic("should not be called")
+}
+
+func (t *bevTask) destroy() {
+	st := t.getStatus()
+	if st == sDestroyed {
+		return
+	}
+
+	if debug {
+		assert(st != sRunning, "bevTask still running")
+	}
+
+	t.node.destroyTask(t)
+	t.node = nil
+	t.st = sDestroyed
 }

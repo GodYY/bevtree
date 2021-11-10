@@ -2,19 +2,19 @@ package bevtree
 
 type Env struct {
 	updateSeri         uint32
-	nodeQue            *nodeQueue
-	nodeUpdateBoundary *nodeQueueElem
+	taskQue            *taskQueue
+	taskUpdateBoundary *taskQueueElem
 	DataContext
 	userData interface{}
 }
 
 func NewEnv(userData interface{}) *Env {
 	e := &Env{
-		nodeQue:     newNodeQueue(),
+		taskQue:     newTaskQueue(),
 		DataContext: NewBlackboard(),
 		userData:    userData,
 	}
-	e.nodeUpdateBoundary = e.nodeQue.pushBack(nil)
+	e.taskUpdateBoundary = e.taskQue.pushBack(nil)
 
 	return e
 }
@@ -25,23 +25,25 @@ func (e *Env) UserData() interface{} { return e.userData }
 
 func (e *Env) getUpdateSeri() uint32 { return e.updateSeri }
 
-func (e *Env) noNodes() bool {
-	return e.nodeQue.empty() || (e.nodeQue.len() == 1 && e.nodeQue.front() == e.nodeUpdateBoundary)
+func (e *Env) noTasks() bool {
+	return e.taskQue.empty() || (e.taskQue.getLen() == 1 && e.taskQue.front() == e.taskUpdateBoundary)
 }
 
-func (e *Env) pushNode(node node, nextRounds ...bool) {
+func (e *Env) pushTask(task task, nextRounds ...bool) {
+	assertNilArg(task, "task")
+
 	nextRound := false
 	if len(nextRounds) > 0 {
 		nextRound = nextRounds[0]
 	}
 
-	elem := node.getQueElem()
+	elem := task.getQueElem()
 	if elem != nil {
-		if elem.q == e.nodeQue {
+		if elem.q == e.taskQue {
 			if nextRound {
-				e.nodeQue.moveToBack(elem)
+				e.taskQue.moveToBack(elem)
 			} else {
-				e.nodeQue.moveBefore(elem, e.nodeUpdateBoundary)
+				e.taskQue.moveBefore(elem, e.taskUpdateBoundary)
 			}
 			return
 		}
@@ -49,24 +51,24 @@ func (e *Env) pushNode(node node, nextRounds ...bool) {
 	}
 
 	if nextRound {
-		elem = e.nodeQue.pushBack(node)
+		elem = e.taskQue.pushBack(task)
 	} else {
-		elem = e.nodeQue.insertBefore(node, e.nodeUpdateBoundary)
+		elem = e.taskQue.insertBefore(task, e.taskUpdateBoundary)
 	}
-	node.setQueElem(elem)
+	task.setQueElem(elem)
 }
 
-func (e *Env) pushCurrentNode(node node) {
-	e.pushNode(node)
+func (e *Env) pushCurrentTask(task task) {
+	e.pushTask(task)
 }
 
-func (e *Env) popCurrentNode() node {
-	if e.nodeQue.front() == e.nodeUpdateBoundary {
-		e.nodeQue.moveToBack(e.nodeUpdateBoundary)
+func (e *Env) popCurrentTask() task {
+	if e.taskQue.front() == e.taskUpdateBoundary {
+		e.taskQue.moveToBack(e.taskUpdateBoundary)
 		return nil
 	}
 
-	node := e.nodeQue.popFrontNode()
+	node := e.taskQue.popFrontTask()
 	if node != nil {
 		node.setQueElem(nil)
 	}
@@ -74,23 +76,31 @@ func (e *Env) popCurrentNode() node {
 	return node
 }
 
-func (e *Env) pushNextNode(node node) {
-	e.pushNode(node, true)
+func (e *Env) pushNextTask(task task) {
+	e.pushTask(task, true)
+}
+
+func (e *Env) removeTask(task task) {
+	elem := task.getQueElem()
+	if elem != nil {
+		e.taskQue.remove(elem)
+		task.setQueElem(nil)
+	}
 }
 
 func (e *Env) update() uint32 {
-	e.nodeQue.moveToBack(e.nodeUpdateBoundary)
+	e.taskQue.moveToBack(e.taskUpdateBoundary)
 	e.updateSeri++
 	return e.updateSeri
 }
 
 func (e *Env) reset() {
 	e.updateSeri = 0
-	e.nodeQue.clear(e.onNodeClear)
-	e.nodeUpdateBoundary = e.nodeQue.pushBack(nil)
+	e.taskQue.clear(e.onNodeClear)
+	e.taskUpdateBoundary = e.taskQue.pushBack(nil)
 	e.Clear()
 }
 
-func (e *Env) onNodeClear(n node) {
-	n.setQueElem(nil)
+func (e *Env) onNodeClear(t task) {
+	t.setQueElem(nil)
 }
