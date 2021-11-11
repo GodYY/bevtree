@@ -2,6 +2,4 @@
 
 package bevtree
 
-func init() {
-	debug = true
-}
+const debug = true

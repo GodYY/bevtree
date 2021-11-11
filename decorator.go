@@ -1,11 +1,13 @@
 package bevtree
 
+import "github.com/godyy/bevtree/internal/assert"
+
 type decoratorTask logicTask
 
 type decoratorTaskBase = oneChildTask
 
-func newDecoratorTask(self decoratorTask, node decoratorNode, parent task) decoratorTaskBase {
-	return newOneChildTask(self, node, parent)
+func newDecoratorTask(self decoratorTask) decoratorTaskBase {
+	return newOneChildTask(self)
 }
 
 type decoratorNode = oneChildNode
@@ -31,26 +33,35 @@ func NewInverter() *InverterNode {
 }
 
 func (r *InverterNode) createTask(parent task) task {
-	return newInverterTask(r, parent)
+	return ivtrTaskPool.get().(*inverterTask).ctr(r, parent)
 }
 
-func (r *InverterNode) destroyTask(t task) {}
+func (r *InverterNode) destroyTask(t task) {
+	t.(*inverterTask).dtr()
+	ivtrTaskPool.put(t)
+}
+
+var ivtrTaskPool = newTaskPool(func() task { return newInverterTask() })
 
 type inverterTask struct {
 	decoratorTaskBase
 }
 
-func newInverterTask(node decoratorNode, parent task) *inverterTask {
+func newInverterTask() *inverterTask {
 	t := &inverterTask{}
-	t.decoratorTaskBase = newDecoratorTask(t, node, parent)
+	t.decoratorTaskBase = newDecoratorTask(t)
 	return t
+}
+
+func (r *inverterTask) ctr(node *InverterNode, parent task) task {
+	return r.decoratorTaskBase.ctr(node, parent)
 }
 
 func (r *inverterTask) onChildOver(child task, result Result, e *Env) Result {
 	if result == RSuccess {
-		return RFailure
+		return r.decoratorTaskBase.onChildOver(child, RFailure, e)
 	} else {
-		return RSuccess
+		return r.decoratorTaskBase.onChildOver(child, RSuccess, e)
 	}
 }
 
@@ -69,23 +80,32 @@ func NewSucceeder() *SucceederNode {
 }
 
 func (s *SucceederNode) createTask(parent task) task {
-	return newSucceederTask(s, parent)
+	return succTaskPool.get().(*succeederTask).ctr(s, parent)
 }
 
-func (s *SucceederNode) destroyTask(t task) {}
+func (s *SucceederNode) destroyTask(t task) {
+	t.(*succeederTask).dtr()
+	succTaskPool.put(t)
+}
+
+var succTaskPool = newTaskPool(func() task { return newSucceederTask() })
 
 type succeederTask struct {
 	decoratorTaskBase
 }
 
-func newSucceederTask(node decoratorNode, parent task) *succeederTask {
+func newSucceederTask() *succeederTask {
 	t := &succeederTask{}
-	t.decoratorTaskBase = newDecoratorTask(t, node, parent)
+	t.decoratorTaskBase = newDecoratorTask(t)
 	return t
 }
 
+func (t *succeederTask) ctr(node *SucceederNode, parent task) task {
+	return t.decoratorTaskBase.ctr(node, parent)
+}
+
 func (t *succeederTask) onChildOver(child task, r Result, e *Env) Result {
-	return RSuccess
+	return t.decoratorTaskBase.onChildOver(child, RSuccess, e)
 }
 
 // -----------------------------------------------------------
@@ -98,7 +118,7 @@ type RepeaterNode struct {
 }
 
 func NewRepeater(limited int) *RepeaterNode {
-	assert(limited > 0, "invalid limited")
+	assert.True(limited > 0, "invalid limited")
 
 	r := new(RepeaterNode)
 	r.decoratorNodeBase = newDecoratorNode(r)
@@ -107,20 +127,29 @@ func NewRepeater(limited int) *RepeaterNode {
 }
 
 func (r *RepeaterNode) createTask(parent task) task {
-	return newRepeaterTask(r, parent)
+	return reptrTaskPool.get().(*repeaterTask).ctr(r, parent)
 }
 
-func (r *RepeaterNode) destroyTask(t task) {}
+func (r *RepeaterNode) destroyTask(t task) {
+	t.(*repeaterTask).dtr()
+	reptrTaskPool.put(t)
+}
+
+var reptrTaskPool = newTaskPool(func() task { return newRepeaterTask() })
 
 type repeaterTask struct {
 	decoratorTaskBase
 	count int
 }
 
-func newRepeaterTask(node decoratorNode, parent task) *repeaterTask {
+func newRepeaterTask() *repeaterTask {
 	t := &repeaterTask{}
-	t.decoratorTaskBase = newDecoratorTask(t, node, parent)
+	t.decoratorTaskBase = newDecoratorTask(t)
 	return t
+}
+
+func (t *repeaterTask) ctr(node *RepeaterNode, parent task) task {
+	return t.decoratorTaskBase.ctr(node, parent)
 }
 
 func (t *repeaterTask) getNode() *RepeaterNode {
@@ -148,14 +177,19 @@ func (t *repeaterTask) onTerminate(e *Env) {
 }
 
 func (t *repeaterTask) onChildOver(child task, r Result, e *Env) Result {
+	if debug {
+		assert.Equal(child, t.child, "not child of it")
+	}
+
 	t.count++
 	node := t.getNode()
 	if t.count < node.limited && r == RSuccess {
+		t.child = t.getNode().Child().createTask(t)
 		e.pushCurrentTask(t.child)
-		r = RRunning
+		return RRunning
+	} else {
+		return r
 	}
-
-	return r
 }
 
 // -----------------------------------------------------------
@@ -173,24 +207,38 @@ func NewRepeatUntilFail() *RepeatUntilFailNode {
 }
 
 func (r *RepeatUntilFailNode) createTask(parent task) task {
-	return newRepeatUntilFailTask(r, parent)
+	return rufTaskPool.get().(*repeatUntilFailTask).ctr(r, parent)
 }
 
-func (r *RepeatUntilFailNode) destroyTask(t task) {}
+func (r *RepeatUntilFailNode) destroyTask(t task) {
+	t.(*repeatUntilFailTask).dtr()
+	rufTaskPool.put(t)
+}
+
+var rufTaskPool = newTaskPool(func() task { return newRepeatUntilFailTask() })
 
 type repeatUntilFailTask struct {
 	decoratorTaskBase
 }
 
-func newRepeatUntilFailTask(node decoratorNode, parent task) *repeatUntilFailTask {
+func newRepeatUntilFailTask() *repeatUntilFailTask {
 	t := &repeatUntilFailTask{}
-	t.decoratorTaskBase = newDecoratorTask(t, node, parent)
+	t.decoratorTaskBase = newDecoratorTask(t)
 	return t
 }
 
+func (t *repeatUntilFailTask) ctr(node *RepeatUntilFailNode, parent task) task {
+	return t.decoratorTaskBase.ctr(node, parent)
+}
+
 func (t *repeatUntilFailTask) onChildOver(child task, r Result, e *Env) Result {
+	if debug {
+		assert.Equal(child, t.child, "not child of it")
+	}
+
 	if r == RSuccess {
-		e.pushCurrentTask(child)
+		t.child = t.getNode().Child().createTask(t)
+		e.pushCurrentTask(t.child)
 		return RRunning
 	}
 

@@ -3,9 +3,9 @@ package bevtree
 import (
 	"log"
 	"reflect"
-)
 
-var debug = false
+	"github.com/godyy/bevtree/internal/assert"
+)
 
 type status int8
 
@@ -82,13 +82,15 @@ type task interface {
 	isStopped() bool
 	isOver() bool
 	isRunning() bool
+	getStatus() status
 	getParent() task
-	setQueElem(*taskQueueElem)
-	getQueElem() *taskQueueElem
+	detachParent()
+	setQueElem(*taskQueElem)
+	getQueElem() *taskQueElem
 	update(*Env) Result
 	stop(*Env)
-	childOver(task, Result, *Env) Result
 	lazyStop(*Env)
+	childOver(task, Result, *Env) Result
 	destroy()
 }
 
@@ -121,19 +123,42 @@ type taskBase struct {
 	latestUpdateSeri uint32
 	st               status
 	lzStop           lazyStop
-	qElem            *taskQueueElem
+	qElem            *taskQueElem
 }
 
-func newTask(node node, parent task) taskBase {
+// func newTask(node node, parent task) taskBase {
+// 	if debug {
+// 		assertNilArg(node, "node")
+// 	}
+
+// 	return taskBase{node: node, parent: parent}
+// }
+
+func (t *taskBase) ctr(node node, parent task) {
 	if debug {
-		assertNilArg(node, "node")
+		assert.NilArg(node, "node")
 	}
 
-	return taskBase{node: node, parent: parent}
+	t.node = node
+	t.parent = parent
+	t.latestUpdateSeri = 0
+	t.setStatus(sNone)
+	t.setLZStop(lzsNone)
+	t.qElem = nil
+}
+
+func (t *taskBase) dtr() {
+	t.node = nil
+	t.parent = nil
+	t.qElem = nil
 }
 
 func (t *taskBase) getParent() task {
 	return t.parent
+}
+
+func (t *taskBase) detachParent() {
+	t.parent = nil
 }
 
 func (t *taskBase) setStatus(st status) {
@@ -164,11 +189,11 @@ func (t *taskBase) isRunning() bool {
 	return t.st == sRunning
 }
 
-func (t *taskBase) setQueElem(e *taskQueueElem) {
+func (t *taskBase) setQueElem(e *taskQueElem) {
 	t.qElem = e
 }
 
-func (t *taskBase) getQueElem() *taskQueueElem {
+func (t *taskBase) getQueElem() *taskQueElem {
 	return t.qElem
 }
 
@@ -182,10 +207,6 @@ func (t *taskBase) lazyStop(e *Env) {
 	} else {
 		t.setLZStop(lzsBeforeUpdate)
 	}
-
-	if debug {
-		log.Printf("%s:lazyStop %v %d %d", reflect.TypeOf(t.node).Elem().Name(), t.lzStop, t.latestUpdateSeri, e.getUpdateSeri())
-	}
 }
 
 type logicTask interface {
@@ -193,6 +214,7 @@ type logicTask interface {
 	onInit(*Env) bool
 	onUpdate(*Env) Result
 	onTerminate(*Env)
+	onStop(*Env)
 	onLazyStop(*Env)
 	onChildOver(task, Result, *Env) Result
 }
@@ -202,16 +224,19 @@ type logicTaskBase struct {
 	self logicTask
 }
 
-func newLogicTask(self logicTask, node node, parent task) logicTaskBase {
+func newLogicTask(self logicTask) logicTaskBase {
 	if debug {
-		assertNilArg(self != nil, "self")
-		assertNilArg(node, "node")
+		assert.NilArg(self != nil, "self")
 	}
 
 	return logicTaskBase{
-		taskBase: newTask(node, parent),
-		self:     self,
+		self: self,
 	}
+}
+
+func (t *logicTaskBase) ctr(node node, parent task) task {
+	t.taskBase.ctr(node, parent)
+	return t.self
 }
 
 func (t *logicTaskBase) isBehavior() bool { return false }
@@ -220,7 +245,7 @@ func (t *logicTaskBase) update(e *Env) Result {
 	st := t.getStatus()
 
 	if debug {
-		assertF(st != sDestroyed, "%s.update: task already destroyed", reflect.TypeOf(t.self).Elem().Name())
+		assert.NotEqualf(st, sDestroyed, "%s.update: task already destroyed", reflect.TypeOf(t.self).Elem().Name())
 	}
 
 	// update seri.
@@ -257,10 +282,6 @@ func (t *logicTaskBase) update(e *Env) Result {
 }
 
 func (t *logicTaskBase) doLazyStop(e *Env) Result {
-	if debug {
-		log.Printf("%s.doLazyStop %v", reflect.TypeOf(t.self).Elem().Name(), t.getLZStop())
-	}
-
 	t.self.onLazyStop(e)
 	t.self.onTerminate(e)
 	t.setStatus(sStopped)
@@ -273,6 +294,11 @@ func (t *logicTaskBase) stop(e *Env) {
 		return
 	}
 
+	if debug {
+		log.Printf("%s.stop", reflect.TypeOf(t.self).Elem().Name())
+	}
+
+	t.self.onStop(e)
 	t.self.onTerminate(e)
 	t.setStatus(sStopped)
 	t.setLZStop(lzsNone)
@@ -284,14 +310,11 @@ func (t *logicTaskBase) childOver(child task, r Result, e *Env) Result {
 	}
 
 	if debug {
-		assert(child.getParent() == t.self, "invalid child")
-		assertF(r != RRunning, "child:%s over with running", reflect.TypeOf(child).Elem().Name())
+		assert.Equal(child.getParent(), t.self, "invalid child")
+		assert.NotEqualf(r, RRunning, "child:%s over with running", reflect.TypeOf(child).Elem().Name())
 	}
 
 	if r = t.self.onChildOver(child, r, e); r != RRunning {
-		if debug {
-			log.Printf("%s.childOver over with %v", reflect.TypeOf(t.self).Elem().Name(), r)
-		}
 		t.self.onTerminate(e)
 		t.setStatus(sNone)
 		t.setLZStop(lzsNone)
@@ -301,17 +324,13 @@ func (t *logicTaskBase) childOver(child task, r Result, e *Env) Result {
 }
 
 func (t *logicTaskBase) destroy() {
-	if t.getStatus() == sDestroyed {
-		return
-	}
-
 	if debug {
-		assertF(!t.isRunning(), "%s still running", reflect.TypeOf(t.self).Elem().Name())
+		assert.NotEqualf(t.getStatus(), sDestroyed, "%s already destroyed", reflect.TypeOf(t.self).Elem().Name())
+		assert.Falsef(t.isRunning(), "%s still running", reflect.TypeOf(t.self).Elem().Name())
 	}
 
-	t.node.destroyTask(t.self)
-	t.node = nil
 	t.setStatus(sDestroyed)
+	t.node.destroyTask(t.self)
 }
 
 func (t *logicTaskBase) childLazyStop(child task, e *Env) {
@@ -319,50 +338,6 @@ func (t *logicTaskBase) childLazyStop(child task, e *Env) {
 		child.lazyStop(e)
 		e.pushCurrentTask(child)
 	}
-}
-
-type oneChildTask struct {
-	logicTaskBase
-	child task
-}
-
-func newOneChildTask(self logicTask, node oneChildNode, parent task) oneChildTask {
-	t := oneChildTask{}
-	t.logicTaskBase = newLogicTask(self, node, parent)
-	return t
-}
-
-func (t *oneChildTask) getNode() oneChildNode {
-	return t.node.(oneChildNode)
-}
-
-func (t *oneChildTask) onInit(e *Env) bool {
-	if debug {
-		log.Printf("%s.onInit", reflect.TypeOf(t.self).Elem().Name())
-	}
-
-	node := t.getNode().Child()
-	if node == nil {
-		return false
-	}
-
-	t.child = node.createTask(t.self)
-	e.pushCurrentTask(t.child)
-	return true
-}
-
-func (t *oneChildTask) onUpdate(e *Env) Result {
-	if debug {
-		log.Printf("%s.onUpdate", reflect.TypeOf(t.self).Elem().Name())
-	}
-
-	return RRunning
-}
-
-func (t *oneChildTask) onTerminate(e *Env) {}
-
-func (t *oneChildTask) onLazyStop(e *Env) {
-	t.childLazyStop(t.child, e)
 }
 
 type oneChildNode interface {
@@ -379,7 +354,7 @@ type nodeOneChildBase struct {
 
 func newNodeOneChild(self node) nodeOneChildBase {
 	if debug {
-		assertNilArg(self, "self")
+		assert.NilArg(self, "self")
 	}
 
 	return nodeOneChildBase{
@@ -397,7 +372,7 @@ func (n *nodeOneChildBase) ChildCount() int {
 }
 
 func (n *nodeOneChildBase) SetChild(child node) {
-	assert(child != nil && child.Parent() == nil, "child nil or already has parent")
+	assert.True(child != nil && child.Parent() == nil, "child nil or already has parent")
 
 	if n.child != nil {
 		n.child.setParent(nil)
@@ -421,8 +396,8 @@ func (n *nodeOneChildBase) LastChild() node {
 }
 
 func (n *nodeOneChildBase) AddChild(child node) {
-	assert(n.child == nil, "already have child")
-	assert(child != nil && child.Parent() == nil, "child nil or already has parent")
+	assert.Nil(n.child, "already have child")
+	assert.True(child != nil && child.Parent() == nil, "child nil or already has parent")
 
 	n.SetChild(child)
 }
@@ -434,7 +409,7 @@ func (n *nodeOneChildBase) AddChildAfter(child node, after node) {
 }
 
 func (n *nodeOneChildBase) RemoveChild(child node) {
-	assert(child == n.child, "invalid child")
+	assert.Equal(child, n.child, "invalid child")
 
 	n.SetChild(nil)
 }
@@ -445,17 +420,73 @@ func (n *nodeOneChildBase) MoveChildBefore(child node, mark node) {
 func (n *nodeOneChildBase) MoveChildAfter(child node, mark node) {
 }
 
-type rootTask struct {
-	oneChildTask
+type oneChildTask struct {
+	logicTaskBase
+	child task
 }
 
-func newRootTask(node oneChildNode) *rootTask {
-	t := &rootTask{}
-	t.oneChildTask = newOneChildTask(t, node, nil)
+func newOneChildTask(self logicTask) oneChildTask {
+	t := oneChildTask{}
+	t.logicTaskBase = newLogicTask(self)
 	return t
 }
 
-func (t *rootTask) onChildOver(child task, r Result, e *Env) Result {
+func (t *oneChildTask) ctr(node oneChildNode, parent task) task {
+	return t.logicTaskBase.ctr(node, parent)
+}
+
+func (t *oneChildTask) dtr() {
+	if t.child != nil {
+		if debug {
+			log.Printf("%s.dtr() child not nil", reflect.TypeOf(t.self).Elem().Name())
+		}
+
+		t.child.destroy()
+		t.child = nil
+	}
+
+	t.logicTaskBase.dtr()
+}
+
+func (t *oneChildTask) getNode() oneChildNode {
+	return t.node.(oneChildNode)
+}
+
+func (t *oneChildTask) onInit(e *Env) bool {
+	node := t.getNode().Child()
+	if node == nil {
+		return false
+	}
+
+	t.child = node.createTask(t.self)
+	e.pushCurrentTask(t.child)
+	return true
+}
+
+func (t *oneChildTask) onUpdate(e *Env) Result {
+	return RRunning
+}
+
+func (t *oneChildTask) onTerminate(e *Env) {
+	t.child = nil
+}
+
+func (t *oneChildTask) onStop(e *Env) {
+	t.child.detachParent()
+}
+
+func (t *oneChildTask) onLazyStop(e *Env) {
+	if t.child != nil {
+		t.childLazyStop(t.child, e)
+		t.child = nil
+	}
+}
+
+func (t *oneChildTask) onChildOver(child task, r Result, e *Env) Result {
+	if debug {
+		assert.Equal(child, t.child, "not child of it")
+	}
+
 	return r
 }
 
@@ -478,10 +509,29 @@ func (rootNode) NextSibling() node   { return nil }
 func (rootNode) setNextSibling(node) {}
 
 func (r *rootNode) createTask(_ task) task {
-	return newRootTask(r)
+	return rootTaskPool.get().(*rootTask).ctr(r)
 }
 
-func (r *rootNode) destroyTask(t task) {}
+func (r *rootNode) destroyTask(t task) {
+	t.(*rootTask).dtr()
+	rootTaskPool.put(t)
+}
+
+var rootTaskPool = newTaskPool(func() task { return newRootTask() })
+
+type rootTask struct {
+	oneChildTask
+}
+
+func newRootTask() *rootTask {
+	t := &rootTask{}
+	t.oneChildTask = newOneChildTask(t)
+	return t
+}
+
+func (t *rootTask) ctr(node *rootNode) task {
+	return t.oneChildTask.ctr(node, nil)
+}
 
 type BevTree struct {
 	root_ *rootNode
@@ -511,22 +561,42 @@ func (t *BevTree) Update(e *Env) Result {
 	for task := e.popCurrentTask(); task != nil; task = e.popCurrentTask() {
 		r := task.update(e)
 		if task.isStopped() {
+			task.destroy()
 			continue
 		}
 
 		if task.isOver() {
-			parent := task.getParent()
-			for ; parent != nil && parent.isRunning(); task, parent = parent, parent.getParent() {
+			over := true
+			for task.getParent() != nil {
+				parent := task.getParent()
+				if !parent.isRunning() {
+					over = false
+					break
+				}
+
 				r = parent.childOver(task, r, e)
 
 				if parent.isRunning() {
+					over = false
 					break
-				} else if parent.getQueElem() != nil {
+				}
+
+				if parent.getQueElem() != nil {
 					e.removeTask(parent)
 				}
+
+				task.destroy()
+				task = parent
 			}
 
-			if parent == nil {
+			task.destroy()
+
+			if over {
+				if debug {
+					assert.Equal(result, RRunning, "update over reapeatedly")
+					assert.NotEqual(r, RRunning, "update over with RRunning")
+				}
+
 				result = r
 			}
 		} else if task.isBehavior() {
@@ -535,21 +605,36 @@ func (t *BevTree) Update(e *Env) Result {
 	}
 
 	if debug {
-		assert(result == RRunning || e.noTasks(), "update over but already has tasks")
+		assert.True(result == RRunning || e.noTasks(), "update over but already has tasks")
 	}
 
 	return result
 }
 
 func (t *BevTree) Reset(e *Env) {
-	for task := e.popCurrentTask(); !e.noTasks(); task = e.popCurrentTask() {
-		if task != nil {
+	clearTaskQue(e.getTaskQue(), e)
+	e.reset()
+}
+
+func clearTaskQue(q *taskQue, e *Env) {
+	if debug {
+		assert.NilArg(q, "taskQueue")
+	}
+
+	for !q.empty() {
+		task := q.popFrontTask()
+		if task == nil {
+			continue
+		}
+
+		assert.True(task.isBehavior(), "task is not behavior")
+
+		for task != nil {
+			parent := task.getParent()
 			task.stop(e)
-			for parent := task.getParent(); parent != nil && parent.isRunning(); parent = parent.getParent() {
-				parent.stop(e)
-			}
+			task.destroy()
+			task = parent
 		}
 	}
 
-	e.reset()
 }

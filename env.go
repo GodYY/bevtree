@@ -1,25 +1,58 @@
 package bevtree
 
+import (
+	"log"
+
+	"github.com/godyy/bevtree/data"
+	"github.com/godyy/bevtree/internal/assert"
+	"github.com/godyy/bevtree/internal/finalize"
+)
+
 type Env struct {
 	updateSeri         uint32
-	taskQue            *taskQueue
-	taskUpdateBoundary *taskQueueElem
-	DataContext
+	taskQue            *taskQue
+	taskUpdateBoundary *taskQueElem
+	data.DataContext
 	userData interface{}
 }
 
 func NewEnv(userData interface{}) *Env {
 	e := &Env{
 		taskQue:     newTaskQueue(),
-		DataContext: NewBlackboard(),
+		DataContext: data.NewBlackboard(),
 		userData:    userData,
 	}
-	e.taskUpdateBoundary = e.taskQue.pushBack(nil)
+
+	finalize.SetFinalizer(e)
 
 	return e
 }
 
-func (e *Env) DataCtx() DataContext { return e.DataContext }
+func (e *Env) Release() {
+	finalize.UnsetFinalizer(e)
+	e.release()
+	e = nil
+}
+
+func (e *Env) release() {
+	clearTaskQue(e.taskQue, e)
+	e.taskQue = nil
+	e.taskUpdateBoundary = nil
+	e.DataContext.Clear()
+	e.DataContext = nil
+	e.userData = nil
+}
+
+func (e *Env) Finalizer() {
+	if debug {
+		log.Println("Env.Finalizer")
+	}
+	e.release()
+}
+
+func (e *Env) getTaskQue() *taskQue { return e.taskQue }
+
+func (e *Env) DataCtx() data.DataContext { return e.DataContext }
 
 func (e *Env) UserData() interface{} { return e.userData }
 
@@ -29,8 +62,16 @@ func (e *Env) noTasks() bool {
 	return e.taskQue.empty() || (e.taskQue.getLen() == 1 && e.taskQue.front() == e.taskUpdateBoundary)
 }
 
+func (e *Env) lazyPushUpdateBoundary() {
+	if e.taskUpdateBoundary == nil {
+		e.taskUpdateBoundary = e.taskQue.pushBack(nil)
+	}
+}
+
 func (e *Env) pushTask(task task, nextRounds ...bool) {
-	assertNilArg(task, "task")
+	assert.NilArg(task, "task")
+
+	e.lazyPushUpdateBoundary()
 
 	nextRound := false
 	if len(nextRounds) > 0 {
@@ -63,6 +104,8 @@ func (e *Env) pushCurrentTask(task task) {
 }
 
 func (e *Env) popCurrentTask() task {
+	e.lazyPushUpdateBoundary()
+
 	if e.taskQue.front() == e.taskUpdateBoundary {
 		e.taskQue.moveToBack(e.taskUpdateBoundary)
 		return nil
@@ -89,18 +132,14 @@ func (e *Env) removeTask(task task) {
 }
 
 func (e *Env) update() uint32 {
-	e.taskQue.moveToBack(e.taskUpdateBoundary)
+	e.lazyPushUpdateBoundary()
 	e.updateSeri++
 	return e.updateSeri
 }
 
 func (e *Env) reset() {
 	e.updateSeri = 0
-	e.taskQue.clear(e.onNodeClear)
-	e.taskUpdateBoundary = e.taskQue.pushBack(nil)
-	e.Clear()
-}
-
-func (e *Env) onNodeClear(t task) {
-	t.setQueElem(nil)
+	clearTaskQue(e.taskQue, e)
+	e.taskUpdateBoundary = nil
+	e.DataContext.Clear()
 }

@@ -4,6 +4,8 @@ import (
 	"log"
 	"math/rand"
 	"reflect"
+
+	"github.com/godyy/bevtree/internal/assert"
 )
 
 type compositeNode = node
@@ -20,7 +22,7 @@ type compositeNodeBase struct {
 
 func newCompositeNode(self compositeNode) compositeNodeBase {
 	if debug {
-		assertNilArg(self, "self")
+		assert.NilArg(self, "self")
 	}
 
 	return compositeNodeBase{
@@ -36,7 +38,7 @@ func (c *compositeNodeBase) FirstChild() node { return c.firstChild }
 func (c *compositeNodeBase) LastChild() node { return c.lastChild }
 
 func (c *compositeNodeBase) AddChild(child node) {
-	assert(child != nil && child.Parent() == nil, "child nil or already has parent")
+	assert.True(child != nil && child.Parent() == nil, "child nil or already has parent")
 
 	if c.lastChild == nil {
 		c.lastChild = child
@@ -49,8 +51,8 @@ func (c *compositeNodeBase) AddChild(child node) {
 }
 
 func (c *compositeNodeBase) AddChildBefore(child, mark node) {
-	assert(child != nil && child.Parent() == nil, "child nil or already has parent")
-	assert(mark != nil && mark.Parent() == c.self, "mark nil or not child of it")
+	assert.True(child != nil && child.Parent() == nil, "child nil or already has parent")
+	assert.True(mark != nil && mark.Parent() == c.self, "mark nil or not child of it")
 
 	child.setParent(c.self)
 
@@ -69,8 +71,8 @@ func (c *compositeNodeBase) AddChildBefore(child, mark node) {
 }
 
 func (c *compositeNodeBase) AddChildAfter(child, mark node) {
-	assert(child != nil && child.Parent() == nil, "child nil or already has parent")
-	assert(mark != nil && mark.Parent() == c.self, "mark nil or not child of it")
+	assert.True(child != nil && child.Parent() == nil, "child nil or already has parent")
+	assert.True(mark != nil && mark.Parent() == c.self, "mark nil or not child of it")
 
 	child.setParent(c.self)
 
@@ -89,8 +91,8 @@ func (c *compositeNodeBase) AddChildAfter(child, mark node) {
 }
 
 func (c *compositeNodeBase) MoveChildBefore(child, mark node) {
-	assert(child != nil && child.Parent() == c.self, "child nil or not child of it")
-	assert(mark != nil && mark.Parent() == c.self, "mark nil or not child of it")
+	assert.True(child != nil && child.Parent() == c.self, "child nil or not child of it")
+	assert.True(mark != nil && mark.Parent() == c.self, "mark nil or not child of it")
 
 	if child.PrevSibling() != nil {
 		child.PrevSibling().setNextSibling(child.NextSibling())
@@ -113,8 +115,8 @@ func (c *compositeNodeBase) MoveChildBefore(child, mark node) {
 }
 
 func (c *compositeNodeBase) MoveChildAfter(child, mark node) {
-	assert(child != nil && child.Parent() == c.self, "child nil or not child of it")
-	assert(mark != nil && mark.Parent() == c.self, "mark nil or not child of it")
+	assert.True(child != nil && child.Parent() == c.self, "child nil or not child of it")
+	assert.True(mark != nil && mark.Parent() == c.self, "mark nil or not child of it")
 
 	if child.PrevSibling() != nil {
 		child.PrevSibling().setNextSibling(child.NextSibling())
@@ -137,7 +139,7 @@ func (c *compositeNodeBase) MoveChildAfter(child, mark node) {
 }
 
 func (c *compositeNodeBase) RemoveChild(child node) {
-	assert(child != nil && child.Parent() == c.self, "child nil or not child of it")
+	assert.True(child != nil && child.Parent() == c.self, "child nil or not child of it")
 
 	if child.PrevSibling() != nil {
 		child.PrevSibling().setNextSibling(child.NextSibling())
@@ -161,9 +163,9 @@ type compositeTaskBase struct {
 	logicTaskBase
 }
 
-func newCompisteTask(self compositeTask, node node, parent task) compositeTaskBase {
+func newCompisteTask(self compositeTask) compositeTaskBase {
 	return compositeTaskBase{
-		logicTaskBase: newLogicTask(self, node, parent),
+		logicTaskBase: newLogicTask(self),
 	}
 }
 
@@ -183,30 +185,34 @@ type customSeqTask struct {
 	getNextNode func() node
 }
 
-func newCustomSeqTask(self compositeTask, node node, parent task, keepOn func(Result) bool, getNextNode func() node) customSeqTask {
+func newCustomSeqTask(self compositeTask, keepOn func(Result) bool, getNextNode func() node) customSeqTask {
 	if debug {
-		assertNilArg(keepOn, "keepOn")
-		assertNilArg(getNextNode, "getNextChild")
+		assert.NilArg(keepOn, "keepOn")
+		assert.NilArg(getNextNode, "getNextChild")
 	}
 
 	return customSeqTask{
-		compositeTaskBase: newCompisteTask(self, node, parent),
+		compositeTaskBase: newCompisteTask(self),
 		keepOn:            keepOn,
 		getNextNode:       getNextNode,
 	}
 }
 
-func (t *customSeqTask) checkChild(child task) {
-	if child != t.curChild {
-		panic("not current child")
+func (t *customSeqTask) dtr() {
+	if t.curChild != nil {
+		if debug {
+			log.Printf("%s.dtr() curChild not nil", reflect.TypeOf(t.self).Elem().Name())
+		}
+
+		t.curChild.destroy()
+		t.curChild = nil
 	}
+
+	t.curNode = nil
+	t.compositeTaskBase.dtr()
 }
 
 func (t *customSeqTask) onInit(e *Env) bool {
-	if debug {
-		log.Printf("%s.onInit", reflect.TypeOf(t.self).Elem().Name())
-	}
-
 	t.curNode = t.getNextNode()
 	if t.curNode == nil {
 		return false
@@ -226,12 +232,16 @@ func (t *customSeqTask) onTerminate(e *Env) {
 	t.curNode = nil
 }
 
+func (t *customSeqTask) onStop(e *Env) {
+	t.curChild.detachParent()
+}
+
 func (t *customSeqTask) onLazyStop(e *Env) {
 	t.childLazyStop(t.curChild, e)
 }
 
 func (t *customSeqTask) onChildOver(child task, r Result, e *Env) Result {
-	assert(child == t.curChild, "not current child")
+	assert.Equal(child, t.curChild, "not current child")
 
 	if !t.keepOn(r) {
 		return r
@@ -256,9 +266,9 @@ type childSeqTask struct {
 	customSeqTask
 }
 
-func newChildSeqTask(self compositeTask, node node, parent task, keepOn func(Result) bool) *childSeqTask {
+func newChildSeqTask(self compositeTask, keepOn func(Result) bool) *childSeqTask {
 	t := new(childSeqTask)
-	t.customSeqTask = newCustomSeqTask(self, node, parent, keepOn, t.getNextNode)
+	t.customSeqTask = newCustomSeqTask(self, keepOn, t.getNextNode)
 	return t
 }
 
@@ -289,19 +299,28 @@ func NewSequence() *SequenceNode {
 }
 
 func (s *SequenceNode) createTask(parent task) task {
-	return newSequenceTask(s, parent)
+	return sequenceTaskPool.get().(*sequenceTask).ctr(s, parent)
 }
 
-func (s *SequenceNode) destroyTask(t task) {}
+func (s *SequenceNode) destroyTask(t task) {
+	t.(*sequenceTask).dtr()
+	sequenceTaskPool.put(t)
+}
+
+var sequenceTaskPool = newTaskPool(func() task { return newSequenceTask() })
 
 type sequenceTask struct {
 	*childSeqTask
 }
 
-func newSequenceTask(node node, parent task) *sequenceTask {
+func newSequenceTask() *sequenceTask {
 	t := new(sequenceTask)
-	t.childSeqTask = newChildSeqTask(t, node, parent, sequenceKeepOn)
+	t.childSeqTask = newChildSeqTask(t, sequenceKeepOn)
 	return t
+}
+
+func (t *sequenceTask) ctr(node *SequenceNode, parent task) task {
+	return t.childSeqTask.ctr(node, parent)
 }
 
 // -----------------------------------------------------------
@@ -323,19 +342,28 @@ func NewSelector() *SelectorNode {
 }
 
 func (s *SelectorNode) createTask(parent task) task {
-	return newSelectorTask(s, parent)
+	return selectorTaskPool.get().(*selectorTask).ctr(s, parent)
 }
 
-func (s *SelectorNode) destroyTask(t task) {}
+func (s *SelectorNode) destroyTask(t task) {
+	t.(*selectorTask).dtr()
+	selectorTaskPool.put(t)
+}
+
+var selectorTaskPool = newTaskPool(func() task { return newSelectorTask() })
 
 type selectorTask struct {
 	*childSeqTask
 }
 
-func newSelectorTask(node node, parent task) *selectorTask {
+func newSelectorTask() *selectorTask {
 	t := new(selectorTask)
-	t.childSeqTask = newChildSeqTask(t, node, parent, selectorKeepOn)
+	t.childSeqTask = newChildSeqTask(t, selectorKeepOn)
 	return t
+}
+
+func (t *selectorTask) ctr(node *SelectorNode, parent task) task {
+	return t.childSeqTask.ctr(node, parent)
 }
 
 // -----------------------------------------------------------
@@ -348,10 +376,16 @@ type randChildSeqTask struct {
 	curNode int
 }
 
-func newRandChildSeqTask(self compositeTask, node node, parent task, keepOn func(Result) bool) *randChildSeqTask {
+func newRandChildSeqTask(self compositeTask, keepOn func(Result) bool) *randChildSeqTask {
 	t := new(randChildSeqTask)
-	t.customSeqTask = newCustomSeqTask(self, node, parent, keepOn, t.getNextNode)
+	t.customSeqTask = newCustomSeqTask(self, keepOn, t.getNextNode)
 	return t
+}
+
+func (t *randChildSeqTask) dtr() {
+	t.nodes = nil
+	t.curNode = -1
+	t.customSeqTask.dtr()
 }
 
 func (t *randChildSeqTask) onInit(e *Env) bool {
@@ -418,19 +452,28 @@ func NewRandSequence() *RandSequenceNode {
 }
 
 func (s *RandSequenceNode) createTask(parent task) task {
-	return newRandSequenceTask(s, parent)
+	return randSeqTaskPool.get().(*randSequenceTask).ctr(s, parent)
 }
 
-func (s *RandSequenceNode) destroyTask(t task) {}
+func (s *RandSequenceNode) destroyTask(t task) {
+	t.(*randSequenceTask).dtr()
+	randSeqTaskPool.put(t)
+}
+
+var randSeqTaskPool = newTaskPool(func() task { return newRandSequenceTask() })
 
 type randSequenceTask struct {
 	*randChildSeqTask
 }
 
-func newRandSequenceTask(node node, parent task) *randSequenceTask {
+func newRandSequenceTask() *randSequenceTask {
 	s := new(randSequenceTask)
-	s.randChildSeqTask = newRandChildSeqTask(s, node, parent, sequenceKeepOn)
+	s.randChildSeqTask = newRandChildSeqTask(s, sequenceKeepOn)
 	return s
+}
+
+func (t *randSequenceTask) ctr(node *RandSequenceNode, parent task) task {
+	return t.randChildSeqTask.ctr(node, parent)
 }
 
 // -----------------------------------------------------------
@@ -448,19 +491,28 @@ func NewRandSelector() *RandSelectorNode {
 }
 
 func (s *RandSelectorNode) createTask(parent task) task {
-	return newRandSelectorTask(s, parent)
+	return randSelcTaskPool.get().(*randSelectorTask).ctr(s, parent)
 }
 
-func (s *RandSelectorNode) destroyTask(t task) {}
+func (s *RandSelectorNode) destroyTask(t task) {
+	t.(*randSelectorTask).dtr()
+	randSelcTaskPool.put(t)
+}
+
+var randSelcTaskPool = newTaskPool(func() task { return newRandSelectorTask() })
 
 type randSelectorTask struct {
 	*randChildSeqTask
 }
 
-func newRandSelectorTask(node node, parent task) *randSelectorTask {
+func newRandSelectorTask() *randSelectorTask {
 	s := new(randSelectorTask)
-	s.randChildSeqTask = newRandChildSeqTask(s, node, parent, selectorKeepOn)
+	s.randChildSeqTask = newRandChildSeqTask(s, selectorKeepOn)
 	return s
+}
+
+func (t *randSelectorTask) ctr(node *RandSelectorNode, parent task) task {
+	return t.randChildSeqTask.ctr(node, parent)
 }
 
 // -----------------------------------------------------------
@@ -478,10 +530,15 @@ func NewParallel() *ParallelNode {
 }
 
 func (p *ParallelNode) createTask(parent task) task {
-	return newParellelTask(p, parent)
+	return paralTaskPool.get().(*parallelTask).ctr(p, parent)
 }
 
-func (p *ParallelNode) destroyTask(t task) {}
+func (p *ParallelNode) destroyTask(t task) {
+	t.(*parallelTask).dtr()
+	paralTaskPool.put(t)
+}
+
+var paralTaskPool = newTaskPool(func() task { return newParellelTask() })
 
 type parallelTask struct {
 	compositeTaskBase
@@ -489,10 +546,31 @@ type parallelTask struct {
 	completed int
 }
 
-func newParellelTask(node node, parent task) *parallelTask {
+func newParellelTask() *parallelTask {
 	t := new(parallelTask)
-	t.compositeTaskBase = newCompisteTask(t, node, parent)
+	t.compositeTaskBase = newCompisteTask(t)
 	return t
+}
+
+func (t *parallelTask) ctr(node *ParallelNode, parent task) task {
+	return t.compositeTaskBase.ctr(node, parent)
+}
+
+func (t *parallelTask) dtr() {
+	for i, v := range t.childs {
+		if v != nil {
+			if debug {
+				log.Printf("parallelTask.dtr() No.%d child not nil", i)
+			}
+
+			v.destroy()
+		}
+	}
+	t.childs = nil
+
+	t.completed = 0
+
+	t.compositeTaskBase.dtr()
 }
 
 func (t *parallelTask) onInit(e *Env) bool {
@@ -519,6 +597,14 @@ func (t *parallelTask) onTerminate(e *Env) {
 	t.completed = 0
 }
 
+func (t *parallelTask) onStop(e *Env) {
+	for _, v := range t.childs {
+		if v != nil {
+			v.detachParent()
+		}
+	}
+}
+
 func (t *parallelTask) onLazyStop(e *Env) {
 	for _, v := range t.childs {
 		t.childLazyStop(v, e)
@@ -535,6 +621,11 @@ func (t *parallelTask) onChildOver(child task, r Result, e *Env) Result {
 			}
 		}
 	} else if t.completed < len(t.childs) {
+		for i, v := range t.childs {
+			if v == child {
+				t.childs[i] = nil
+			}
+		}
 		r = RRunning
 	}
 

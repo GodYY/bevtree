@@ -1,7 +1,6 @@
 package bevtree
 
 import (
-	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -32,7 +31,7 @@ func (t *test) run(tt *testing.T, expectedResult Result, expectedKeyValues map[s
 			tt.Log("run", i, "update", k)
 			k++
 			result = t.tree.Update(t.e)
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(1 * time.Millisecond)
 		}
 		tt.Log("run", i, "end", result)
 	}
@@ -46,6 +45,16 @@ func (t *test) run(tt *testing.T, expectedResult Result, expectedKeyValues map[s
 			tt.Fatalf("%s = %v(%v)", k, t.e.DataCtx().Val(k), v)
 		}
 	}
+}
+
+func (t *test) clear() {
+	t.tree = nil
+	t.e = nil
+}
+
+func (t *test) close() {
+	t.tree = nil
+	t.e.Release()
 }
 
 type bevFunc struct {
@@ -77,6 +86,8 @@ func newBevFuncDefiner(f func(*Env) Result) *bevFuncDefiner {
 func (d *bevFuncDefiner) CreateBev() Bev {
 	return newBevFunc(d.f)
 }
+
+func (d *bevFuncDefiner) DestroyBev(Bev) {}
 
 func TestRoot(t *testing.T) {
 	test := newTest()
@@ -147,7 +158,7 @@ func TestRandomSequence(t *testing.T) {
 	for i := 0; i < n; i++ {
 		k := i
 		seq.AddChild(NewBev(newBevFuncDefiner(func(e *Env) Result {
-			fmt.Println("seq", k, "update")
+			t.Log("seq", k, "update")
 			val := e.DataCtx().Val(key).(int) + 1
 			e.DataCtx().Set(key, val)
 			return RSuccess
@@ -172,7 +183,7 @@ func TestRandomSelector(t *testing.T) {
 	for i := 0; i < n; i++ {
 		k := i
 		selc.AddChild(NewBev(newBevFuncDefiner((func(e *Env) Result {
-			fmt.Println("seq", k, "update")
+			t.Log("seq", k, "update")
 			if k == selected {
 				test.e.DataCtx().Set(key, selected)
 				return RSuccess
@@ -369,6 +380,8 @@ func (d *behaviorIncrDefiner) CreateBev() Bev {
 	return newBehaviorIncr(d.key, d.limited)
 }
 
+func (d *behaviorIncrDefiner) DestroyBev(Bev) {}
+
 func TestShareTree(t *testing.T) {
 
 	tree := NewTree()
@@ -426,4 +439,50 @@ func TestShareTree(t *testing.T) {
 	if sum != singleSum*numEnvs {
 		t.Fatalf("expected sum %d get %d", singleSum*numEnvs, sum)
 	}
+}
+
+type behaviorUpdate struct {
+	limited int
+	count   int
+}
+
+func newBehaviorUpdate(limited int) *behaviorUpdate {
+	return &behaviorUpdate{
+		limited: limited,
+	}
+}
+
+func (b *behaviorUpdate) OnInit(e *Env) {}
+
+func (b *behaviorUpdate) OnUpdate(e *Env) Result {
+	if b.count >= b.limited {
+		return RSuccess
+	}
+
+	b.count++
+	if b.count >= b.limited {
+		return RSuccess
+	}
+
+	return RRunning
+}
+
+func (b *behaviorUpdate) OnTerminate(e *Env) {
+	b.count = 0
+}
+
+type behaviorUpdateDefiner struct {
+	limited int
+}
+
+func newBehaviorUpdateDefiner(limited int) *behaviorUpdateDefiner {
+	return &behaviorUpdateDefiner{limited: limited}
+}
+
+func (d *behaviorUpdateDefiner) CreateBev() Bev {
+	return newBehaviorUpdate(d.limited)
+}
+
+func (d *behaviorUpdateDefiner) DestroyBev(Bev) {
+
 }

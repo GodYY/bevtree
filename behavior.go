@@ -1,8 +1,6 @@
 package bevtree
 
-import (
-	"log"
-)
+import "github.com/godyy/bevtree/internal/assert"
 
 type Bev interface {
 	OnInit(*Env)
@@ -12,18 +10,19 @@ type Bev interface {
 
 type BevDefiner interface {
 	CreateBev() Bev
+	DestroyBev(Bev)
 }
 
 type BevNode struct {
 	nodeBase
-	bev BevDefiner
+	bevDef BevDefiner
 }
 
 func NewBev(bevDef BevDefiner) *BevNode {
-	assertNilArg(bevDef, "bevDef")
+	assert.NilArg(bevDef, "bevDef")
 
 	return &BevNode{
-		bev: bevDef,
+		bevDef: bevDef,
 	}
 }
 
@@ -38,25 +37,42 @@ func (BevNode) FirstChild() node          { return nil }
 func (BevNode) LastChild() node           { return nil }
 
 func (b *BevNode) createTask(parent task) task {
-	return newBevTask(b, parent, b.bev.CreateBev())
+	bev := b.bevDef.CreateBev()
+	assert.Nil(bev, "bevDef create nil behavior")
+
+	return bevTaskPool.get().(*bevTask).ctr(b, parent, bev)
 }
 
-func (b *BevNode) destroyTask(t task) {}
+func (b *BevNode) destroyTask(t task) {
+	bt := t.(*bevTask)
+	b.bevDef.DestroyBev(bt.bev)
+	bt.dtr()
+	bevTaskPool.put(t)
+}
+
+var bevTaskPool = newTaskPool(func() task { return newBevTask() })
 
 type bevTask struct {
 	taskBase
 	bev Bev
 }
 
-func newBevTask(node *BevNode, parent task, bev Bev) *bevTask {
-	assertNilArg(bev, "bev")
+func newBevTask() *bevTask {
+	return new(bevTask)
+}
 
-	t := &bevTask{
-		bev:      bev,
-		taskBase: newTask(node, parent),
-	}
+func (t *bevTask) ctr(node *BevNode, parent task, bev Bev) task {
+	assert.NilArg(bev, "bev")
+
+	t.taskBase.ctr(node, parent)
+	t.bev = bev
 
 	return t
+}
+
+func (t *bevTask) dtr() {
+	t.bev = nil
+	t.taskBase.dtr()
 }
 
 func (t *bevTask) isBehavior() bool { return true }
@@ -65,7 +81,7 @@ func (t *bevTask) update(e *Env) Result {
 	st := t.getStatus()
 
 	if debug {
-		assert(st != sDestroyed, "bevTask already destroyed")
+		assert.NotEqual(st, sDestroyed, "bevTask already destroyed")
 	}
 
 	// update seri.
@@ -113,10 +129,6 @@ func (t *bevTask) stop(e *Env) {
 }
 
 func (t *bevTask) doLazyStop(e *Env) Result {
-	if debug {
-		log.Println("bevTask.doLazyStop", t.getLZStop())
-	}
-
 	t.stop(e)
 	return RFailure
 }
@@ -126,16 +138,11 @@ func (t *bevTask) childOver(_ task, _ Result, _ *Env) Result {
 }
 
 func (t *bevTask) destroy() {
-	st := t.getStatus()
-	if st == sDestroyed {
-		return
-	}
-
 	if debug {
-		assert(st != sRunning, "bevTask still running")
+		assert.NotEqual(t.getStatus(), sDestroyed, "bevTask already destroyed")
+		assert.False(t.isRunning(), "bevTask still running")
 	}
 
-	t.node.destroyTask(t)
-	t.node = nil
 	t.st = sDestroyed
+	t.node.destroyTask(t)
 }
