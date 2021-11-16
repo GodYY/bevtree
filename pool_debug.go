@@ -48,7 +48,7 @@ func getTaskQueElem() *taskQueElem {
 }
 
 func putTaskQueElem(e *taskQueElem) {
-	assert.NilArg(e, "elem")
+	assert.NotNilArg(e, "elem")
 	atomic.AddInt64(&taskElemTotalPutTimes, 1)
 	taskElemPool.Put(e)
 }

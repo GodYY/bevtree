@@ -82,7 +82,7 @@ func TestReset(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		tree.Update(e)
-		tree.Reset(e)
+		tree.Stop(e)
 
 		if getTaskTotalGetTimes() != getTaskTotalPutTimes() {
 			t.Fatalf("No.%d taskTotalGetTimes(%d) != taskTotalPutTimes(%d), memory leak", i, getTaskTotalGetTimes(), getTaskTotalPutTimes())

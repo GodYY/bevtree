@@ -315,7 +315,7 @@ func TestSucceeder(t *testing.T) {
 func TestRepeatUntilFail(t *testing.T) {
 	test := newTest()
 
-	repeat := NewRepeatUntilFail()
+	repeat := NewRepeatUntilFail(false)
 	test.tree.root().SetChild(repeat)
 
 	n := 4

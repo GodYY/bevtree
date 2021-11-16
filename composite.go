@@ -22,7 +22,7 @@ type compositeNodeBase struct {
 
 func newCompositeNode(self compositeNode) compositeNodeBase {
 	if debug {
-		assert.NilArg(self, "self")
+		assert.NotNilArg(self, "self")
 	}
 
 	return compositeNodeBase{
@@ -187,8 +187,8 @@ type customSeqTask struct {
 
 func newCustomSeqTask(self compositeTask, keepOn func(Result) bool, getNextNode func() node) customSeqTask {
 	if debug {
-		assert.NilArg(keepOn, "keepOn")
-		assert.NilArg(getNextNode, "getNextChild")
+		assert.NotNilArg(keepOn, "keepOn")
+		assert.NotNilArg(getNextNode, "getNextChild")
 	}
 
 	return customSeqTask{
@@ -237,11 +237,19 @@ func (t *customSeqTask) onStop(e *Env) {
 }
 
 func (t *customSeqTask) onLazyStop(e *Env) {
-	t.childLazyStop(t.curChild, e)
+	if t.curChild != nil {
+		t.curChild.lazyStop(e)
+	}
 }
 
 func (t *customSeqTask) onChildOver(child task, r Result, e *Env) Result {
 	assert.Equal(child, t.curChild, "not current child")
+
+	t.curChild = nil
+
+	if t.isLazyStop() {
+		return RRunning
+	}
 
 	if !t.keepOn(r) {
 		return r
@@ -298,6 +306,8 @@ func NewSequence() *SequenceNode {
 	return s
 }
 
+func (s *SequenceNode) nodeType() nodeType { return ntSequence }
+
 func (s *SequenceNode) createTask(parent task) task {
 	return sequenceTaskPool.get().(*sequenceTask).ctr(s, parent)
 }
@@ -340,6 +350,8 @@ func NewSelector() *SelectorNode {
 	s.compositeNodeBase = newCompositeNode(s)
 	return s
 }
+
+func (s *SelectorNode) nodeType() nodeType { return ntSelector }
 
 func (s *SelectorNode) createTask(parent task) task {
 	return selectorTaskPool.get().(*selectorTask).ctr(s, parent)
@@ -451,6 +463,8 @@ func NewRandSequence() *RandSequenceNode {
 	return s
 }
 
+func (s *RandSequenceNode) nodeType() nodeType { return ntRandSequence }
+
 func (s *RandSequenceNode) createTask(parent task) task {
 	return randSeqTaskPool.get().(*randSequenceTask).ctr(s, parent)
 }
@@ -490,6 +504,8 @@ func NewRandSelector() *RandSelectorNode {
 	return s
 }
 
+func (s *RandSelectorNode) nodeType() nodeType { return ntRandSelector }
+
 func (s *RandSelectorNode) createTask(parent task) task {
 	return randSelcTaskPool.get().(*randSelectorTask).ctr(s, parent)
 }
@@ -528,6 +544,8 @@ func NewParallel() *ParallelNode {
 	p.compositeNodeBase = newCompositeNode(p)
 	return p
 }
+
+func (p *ParallelNode) nodeType() nodeType { return ntParallel }
 
 func (p *ParallelNode) createTask(parent task) task {
 	return paralTaskPool.get().(*parallelTask).ctr(p, parent)
@@ -607,25 +625,32 @@ func (t *parallelTask) onStop(e *Env) {
 
 func (t *parallelTask) onLazyStop(e *Env) {
 	for _, v := range t.childs {
-		t.childLazyStop(v, e)
+		if v != nil {
+			v.lazyStop(e)
+		}
 	}
 }
 
 func (t *parallelTask) onChildOver(child task, r Result, e *Env) Result {
-	t.completed++
+	for i, v := range t.childs {
+		if v == nil {
+			continue
+		}
 
-	if r == RFailure {
-		for _, v := range t.childs {
-			if child != v {
-				t.childLazyStop(v, e)
-			}
+		if r == RSuccess && child == v {
+			t.childs[i] = nil
+			break
+		} else if r == RFailure && child != v {
+			v.lazyStop(e)
 		}
-	} else if t.completed < len(t.childs) {
-		for i, v := range t.childs {
-			if v == child {
-				t.childs[i] = nil
-			}
-		}
+	}
+
+	if t.isLazyStop() {
+		return RRunning
+	}
+
+	t.completed++
+	if r == RSuccess && t.completed < len(t.childs) {
 		r = RRunning
 	}
 

@@ -1,6 +1,8 @@
 package bevtree
 
-import "github.com/godyy/bevtree/internal/assert"
+import (
+	"github.com/godyy/bevtree/internal/assert"
+)
 
 type decoratorTask logicTask
 
@@ -12,7 +14,7 @@ func newDecoratorTask(self decoratorTask) decoratorTaskBase {
 
 type decoratorNode = oneChildNode
 
-type decoratorNodeBase = nodeOneChildBase
+type decoratorNodeBase = oneChildNodeBase
 
 func newDecoratorNode(self decoratorNode) decoratorNodeBase {
 	return newNodeOneChild(self)
@@ -31,6 +33,8 @@ func NewInverter() *InverterNode {
 	i.decoratorNodeBase = newDecoratorNode(i)
 	return i
 }
+
+func (r *InverterNode) nodeType() nodeType { return ntInverter }
 
 func (r *InverterNode) createTask(parent task) task {
 	return ivtrTaskPool.get().(*inverterTask).ctr(r, parent)
@@ -79,6 +83,8 @@ func NewSucceeder() *SucceederNode {
 	return s
 }
 
+func (s *SucceederNode) nodeType() nodeType { return ntSucceeder }
+
 func (s *SucceederNode) createTask(parent task) task {
 	return succTaskPool.get().(*succeederTask).ctr(s, parent)
 }
@@ -117,14 +123,20 @@ type RepeaterNode struct {
 	limited int
 }
 
-func NewRepeater(limited int) *RepeaterNode {
-	assert.True(limited > 0, "invalid limited")
-
+func newRepeater(limited int) *RepeaterNode {
 	r := new(RepeaterNode)
 	r.decoratorNodeBase = newDecoratorNode(r)
 	r.limited = limited
 	return r
 }
+
+func NewRepeater(limited int) *RepeaterNode {
+	assert.True(limited > 0, "invalid limited")
+
+	return newRepeater(limited)
+}
+
+func (r *RepeaterNode) nodeType() nodeType { return ntRepeater }
 
 func (r *RepeaterNode) createTask(parent task) task {
 	return reptrTaskPool.get().(*repeaterTask).ctr(r, parent)
@@ -158,6 +170,7 @@ func (t *repeaterTask) getNode() *RepeaterNode {
 
 func (t *repeaterTask) onInit(e *Env) bool {
 	node := t.getNode()
+
 	if node.Child() == nil || node.limited <= 0 {
 		return false
 	}
@@ -181,6 +194,12 @@ func (t *repeaterTask) onChildOver(child task, r Result, e *Env) Result {
 		assert.Equal(child, t.child, "not child of it")
 	}
 
+	t.child = nil
+
+	if t.isLazyStop() {
+		return RRunning
+	}
+
 	t.count++
 	node := t.getNode()
 	if t.count < node.limited && r == RSuccess {
@@ -198,13 +217,16 @@ func (t *repeaterTask) onChildOver(child task, r Result, e *Env) Result {
 
 type RepeatUntilFailNode struct {
 	decoratorNodeBase
+	successOnFail bool
 }
 
-func NewRepeatUntilFail() *RepeatUntilFailNode {
-	r := new(RepeatUntilFailNode)
+func NewRepeatUntilFail(successOnFail bool) *RepeatUntilFailNode {
+	r := &RepeatUntilFailNode{successOnFail: successOnFail}
 	r.decoratorNodeBase = newDecoratorNode(r)
 	return r
 }
+
+func (r *RepeatUntilFailNode) nodeType() nodeType { return ntRepeatUntilFail }
 
 func (r *RepeatUntilFailNode) createTask(parent task) task {
 	return rufTaskPool.get().(*repeatUntilFailTask).ctr(r, parent)
@@ -231,9 +253,19 @@ func (t *repeatUntilFailTask) ctr(node *RepeatUntilFailNode, parent task) task {
 	return t.decoratorTaskBase.ctr(node, parent)
 }
 
+func (t *repeatUntilFailTask) getNode() *RepeatUntilFailNode {
+	return t.decoratorTaskBase.getNode().(*RepeatUntilFailNode)
+}
+
 func (t *repeatUntilFailTask) onChildOver(child task, r Result, e *Env) Result {
 	if debug {
 		assert.Equal(child, t.child, "not child of it")
+	}
+
+	t.child = nil
+
+	if t.isLazyStop() {
+		return RRunning
 	}
 
 	if r == RSuccess {
@@ -242,5 +274,9 @@ func (t *repeatUntilFailTask) onChildOver(child task, r Result, e *Env) Result {
 		return RRunning
 	}
 
-	return RFailure
+	if t.getNode().successOnFail {
+		return RSuccess
+	} else {
+		return RFailure
+	}
 }

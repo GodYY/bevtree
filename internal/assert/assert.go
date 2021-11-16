@@ -39,14 +39,22 @@ func NotEqualf(a, b interface{}, f string, args ...interface{}) {
 }
 
 func Nil(i interface{}, msg interface{}) {
-	True(i != nil, msg)
+	True(i == nil, msg)
 }
 
 func Nilf(i interface{}, f string, args ...interface{}) {
+	Truef(i == nil, f, args...)
+}
+
+func NotNil(i interface{}, msg interface{}) {
+	True(i != nil, msg)
+}
+
+func NotNilf(i interface{}, f string, args ...interface{}) {
 	Truef(i != nil, f, args...)
 }
 
-func NilArg(arg interface{}, name string) {
+func NotNilArg(arg interface{}, name string) {
 	if arg == nil {
 		log.Panicf("argument \"%s\" nil", name)
 	}

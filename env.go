@@ -31,11 +31,10 @@ func NewEnv(userData interface{}) *Env {
 func (e *Env) Release() {
 	finalize.UnsetFinalizer(e)
 	e.release()
-	e = nil
 }
 
 func (e *Env) release() {
-	clearTaskQue(e.taskQue, e)
+	e.clearTask()
 	e.taskQue = nil
 	e.taskUpdateBoundary = nil
 	e.DataContext.Clear()
@@ -48,6 +47,13 @@ func (e *Env) Finalizer() {
 		log.Println("Env.Finalizer")
 	}
 	e.release()
+}
+
+func (e *Env) reset() {
+	e.updateSeri = 0
+	e.clearTask()
+	e.taskUpdateBoundary = nil
+	e.DataContext.Clear()
 }
 
 func (e *Env) getTaskQue() *taskQue { return e.taskQue }
@@ -69,7 +75,7 @@ func (e *Env) lazyPushUpdateBoundary() {
 }
 
 func (e *Env) pushTask(task task, nextRounds ...bool) {
-	assert.NilArg(task, "task")
+	assert.NotNilArg(task, "task")
 
 	e.lazyPushUpdateBoundary()
 
@@ -131,15 +137,26 @@ func (e *Env) removeTask(task task) {
 	}
 }
 
+func (e *Env) clearTask() {
+	for !e.taskQue.empty() {
+		task := e.taskQue.popFrontTask()
+		if task == nil {
+			continue
+		}
+
+		assert.True(task.isBehavior(), "task is not behavior")
+
+		for task != nil {
+			parent := task.getParent()
+			task.stop(e)
+			task.destroy()
+			task = parent
+		}
+	}
+}
+
 func (e *Env) update() uint32 {
 	e.lazyPushUpdateBoundary()
 	e.updateSeri++
 	return e.updateSeri
-}
-
-func (e *Env) reset() {
-	e.updateSeri = 0
-	clearTaskQue(e.taskQue, e)
-	e.taskUpdateBoundary = nil
-	e.DataContext.Clear()
 }

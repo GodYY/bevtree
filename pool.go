@@ -14,12 +14,12 @@ type taskPool struct {
 
 func newTaskPool(new func() task) *taskPool {
 	if debug {
-		assert.NilArg(new, "new")
+		assert.NotNilArg(new, "new")
 	}
 
 	t := new()
 	if debug {
-		assert.Nil(t, "new() nil task")
+		assert.NotNil(t, "new() nil task")
 	}
 
 	tt := reflect.TypeOf(t).Elem()
