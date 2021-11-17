@@ -183,11 +183,11 @@ func (d *XMLDecoder) DecodeElement(v interface{}, start xml.StartElement) error 
 
 var errDecodeXMLStop = errors.New("decode XML stop")
 
-type decodeXMLCallback func(d *XMLDecoder, start xml.StartElement) error
+type DecodeXMLCallback func(d *XMLDecoder, start xml.StartElement) error
 
 // DecodeEndTo read element end to endTo unless f return error.
 // If f return errDecodeXMLStop, DecodeEndTo return nil.
-func (d *XMLDecoder) DecodeEndTo(endTo xml.EndElement, f decodeXMLCallback) error {
+func (d *XMLDecoder) DecodeEndTo(endTo xml.EndElement, f DecodeXMLCallback) error {
 	var err error
 	var token xml.Token
 	for token, err = d.Token(); err == nil; token, err = d.Token() {
