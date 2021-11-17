@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/godyy/bevtree/internal/assert"
+	"github.com/GodYY/gutils/assert"
 	"github.com/pkg/errors"
 )
 

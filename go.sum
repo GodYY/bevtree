@@ -1,2 +1,4 @@
+github.com/GodYY/gutils v0.0.0-20211117074402-f4f5ecf591f7 h1:wBx4j4PNEkKh3cydNtFLQUrKbbkjLca00Eou0J7ec2Q=
+github.com/GodYY/gutils v0.0.0-20211117074402-f4f5ecf591f7/go.mod h1:nETlXqow5nOHDB6ddsfE5oeXY5k3w1IKqCVZGKDrqao=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=

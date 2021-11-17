@@ -3,9 +3,9 @@ package bevtree
 import (
 	"log"
 
-	"github.com/godyy/bevtree/data"
-	"github.com/godyy/bevtree/internal/assert"
-	"github.com/godyy/bevtree/internal/finalize"
+	"github.com/GodYY/bevtree/data"
+	"github.com/GodYY/gutils/assert"
+	"github.com/GodYY/gutils/finalize"
 )
 
 type Env struct {

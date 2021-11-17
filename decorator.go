@@ -1,7 +1,7 @@
 package bevtree
 
 import (
-	"github.com/godyy/bevtree/internal/assert"
+	"github.com/GodYY/gutils/assert"
 )
 
 type decoratorTask logicTask

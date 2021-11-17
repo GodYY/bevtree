@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/godyy/bevtree/internal/assert"
+	"github.com/GodYY/gutils/assert"
 )
 
 type taskPool struct {

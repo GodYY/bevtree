@@ -3,7 +3,7 @@ package bevtree
 import (
 	"log"
 
-	"github.com/godyy/bevtree/internal/assert"
+	"github.com/GodYY/gutils/assert"
 )
 
 type Bev interface {

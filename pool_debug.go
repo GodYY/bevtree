@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"sync/atomic"
 
-	"github.com/godyy/bevtree/internal/assert"
+	"github.com/GodYY/gutils/assert"
 )
 
 var taskTotalGetTimes int64

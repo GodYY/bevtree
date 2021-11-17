@@ -4,7 +4,7 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/godyy/bevtree/internal/assert"
+	"github.com/GodYY/gutils/assert"
 )
 
 type nodeType int8
