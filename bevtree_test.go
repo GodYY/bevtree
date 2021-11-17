@@ -83,11 +83,11 @@ func newBevFuncDefiner(f func(*Env) Result) *bevFuncDefiner {
 	return &bevFuncDefiner{f: f}
 }
 
-func (d *bevFuncDefiner) CreateBev() Bev {
+func (d *bevFuncDefiner) CreateBev() BevInst {
 	return newBevFunc(d.f)
 }
 
-func (d *bevFuncDefiner) DestroyBev(Bev) {}
+func (d *bevFuncDefiner) DestroyBev(BevInst) {}
 
 func TestRoot(t *testing.T) {
 	test := newTest()
@@ -376,11 +376,11 @@ func newBehaviorIncrDefiner(key string, limited int) *behaviorIncrDefiner {
 	return &behaviorIncrDefiner{key: key, limited: limited}
 }
 
-func (d *behaviorIncrDefiner) CreateBev() Bev {
+func (d *behaviorIncrDefiner) CreateBev() BevInst {
 	return newBehaviorIncr(d.key, d.limited)
 }
 
-func (d *behaviorIncrDefiner) DestroyBev(Bev) {}
+func (d *behaviorIncrDefiner) DestroyBev(BevInst) {}
 
 func TestShareTree(t *testing.T) {
 
@@ -479,10 +479,10 @@ func newBehaviorUpdateDefiner(limited int) *behaviorUpdateDefiner {
 	return &behaviorUpdateDefiner{limited: limited}
 }
 
-func (d *behaviorUpdateDefiner) CreateBev() Bev {
+func (d *behaviorUpdateDefiner) CreateBev() BevInst {
 	return newBehaviorUpdate(d.limited)
 }
 
-func (d *behaviorUpdateDefiner) DestroyBev(Bev) {
+func (d *behaviorUpdateDefiner) DestroyBev(BevInst) {
 
 }

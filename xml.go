@@ -53,15 +53,15 @@ type XMLUnmarshaler interface {
 }
 
 // BevXMLEncoder is the interface implemented by objects than can encode
-// bevtree behavior definer.
+// bevtree Bev.
 type BevXMLEncoder interface {
-	EncodeXMLBev(*XMLEncoder, BevDef, xml.StartElement) error
+	EncodeXMLBev(*XMLEncoder, Bev, xml.StartElement) error
 }
 
 // BevXMLDecoder is the interface implemented by objects than can decode
-// bevtree behavior definer.
+// bevtree Bev.
 type BevXMLDecoder interface {
-	DecodeXMLBev(*XMLDecoder, *BevDef, xml.StartElement) error
+	DecodeXMLBev(*XMLDecoder, *Bev, xml.StartElement) error
 }
 
 // An Encoder writes bevtree XML data to an output stream.
@@ -148,8 +148,8 @@ func (e *XMLEncoder) encodeNode(n node, name xml.Name) error {
 	return e.EncodeStartEnd(n, start)
 }
 
-// encodeBev writes the bevtree XML encoding of BevDef bd to the stream.
-func (e *XMLEncoder) encodeBev(bd BevDef, start xml.StartElement) error {
+// encodeBev writes the bevtree XML encoding of Bev bd to the stream.
+func (e *XMLEncoder) encodeBev(bd Bev, start xml.StartElement) error {
 	return e.bevEnc.EncodeXMLBev(e, bd, start)
 }
 
@@ -277,8 +277,8 @@ func (d *XMLDecoder) decodeNode(pnode *node, start xml.StartElement) error {
 	return nil
 }
 
-// decodeBev parse element from start to create BevDef.
-func (d *XMLDecoder) decodeBev(pbd *BevDef, start xml.StartElement) error {
+// decodeBev parse element from start to create Bev.
+func (d *XMLDecoder) decodeBev(pbd *Bev, start xml.StartElement) error {
 	return d.bevDec.DecodeXMLBev(d, pbd, start)
 }
 
@@ -597,7 +597,7 @@ func (b *BevNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 
 	bevStart := xml.StartElement{Name: xmlNameBev}
 
-	if err := e.encodeBev(b.bevDef, bevStart); err != nil {
+	if err := e.encodeBev(b.bev, bevStart); err != nil {
 		return errors.WithMessage(err, "marshal bev")
 	}
 
@@ -609,7 +609,7 @@ func (b *BevNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 		log.Printf("BevNode.UnmarshalBTXML start:%v", start)
 	}
 
-	if err := d.decodeBev(&b.bevDef, start); err != nil {
+	if err := d.decodeBev(&b.bev, start); err != nil {
 		return errors.WithMessage(err, "unmarshal bev")
 	}
 

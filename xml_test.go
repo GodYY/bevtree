@@ -50,11 +50,11 @@ func newBevBBIncrDef(key string, limited int) *bevBBIncrDef {
 	return &bevBBIncrDef{key: key, limited: limited}
 }
 
-func (bd *bevBBIncrDef) CreateBev() Bev {
+func (bd *bevBBIncrDef) CreateBev() BevInst {
 	return newBevBBIncr(bd.key, bd.limited)
 }
 
-func (bd *bevBBIncrDef) DestroyBev(_ Bev) {
+func (bd *bevBBIncrDef) DestroyBev(_ BevInst) {
 }
 
 var xmlNameKey = createXMLName("key")
@@ -86,11 +86,11 @@ func (bd *bevBBIncrDef) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) er
 type bevCoder struct {
 }
 
-func (c *bevCoder) EncodeXMLBev(e *XMLEncoder, bd BevDef, start xml.StartElement) error {
+func (c *bevCoder) EncodeXMLBev(e *XMLEncoder, bd Bev, start xml.StartElement) error {
 	return e.EncodeStartEnd(bd, start)
 }
 
-func (c *bevCoder) DecodeXMLBev(d *XMLDecoder, pbd *BevDef, start xml.StartElement) error {
+func (c *bevCoder) DecodeXMLBev(d *XMLDecoder, pbd *Bev, start xml.StartElement) error {
 	bd := &bevBBIncrDef{}
 	if err := d.DecodeElement(bd, start); err != nil {
 		return err

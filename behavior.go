@@ -6,31 +6,33 @@ import (
 	"github.com/GodYY/gutils/assert"
 )
 
-type Bev interface {
+type BevInst interface {
 	OnInit(*Env)
 	OnUpdate(*Env) Result
 	OnTerminate(*Env)
 }
 
-type BevDef interface {
-	CreateBev() Bev
-	DestroyBev(Bev)
+// Bev defines a behavior, it can create and destroy instances
+// of it.
+type Bev interface {
+	CreateBev() BevInst
+	DestroyBev(BevInst)
 }
 
 type BevNode struct {
 	nodeBase
-	bevDef BevDef
+	bev Bev
 }
 
 func newBev() *BevNode {
 	return &BevNode{}
 }
 
-func NewBev(bevDef BevDef) *BevNode {
-	assert.NotNilArg(bevDef, "bevDef")
+func NewBev(bev Bev) *BevNode {
+	assert.NotNilArg(bev, "bev")
 
 	return &BevNode{
-		bevDef: bevDef,
+		bev: bev,
 	}
 }
 
@@ -46,15 +48,15 @@ func (BevNode) FirstChild() node          { return nil }
 func (BevNode) LastChild() node           { return nil }
 
 func (b *BevNode) createTask(parent task) task {
-	bev := b.bevDef.CreateBev()
-	assert.NotNil(bev, "bevDef create nil behavior")
+	bev := b.bev.CreateBev()
+	assert.NotNil(bev, "bev create nil bevInst")
 
 	return bevTaskPool.get().(*bevTask).ctr(b, parent, bev)
 }
 
 func (b *BevNode) destroyTask(t task) {
 	bt := t.(*bevTask)
-	b.bevDef.DestroyBev(bt.bev)
+	b.bev.DestroyBev(bt.bev)
 	bt.dtr()
 	bevTaskPool.put(t)
 }
@@ -63,14 +65,14 @@ var bevTaskPool = newTaskPool(func() task { return newBevTask() })
 
 type bevTask struct {
 	taskBase
-	bev Bev
+	bev BevInst
 }
 
 func newBevTask() *bevTask {
 	return new(bevTask)
 }
 
-func (t *bevTask) ctr(node *BevNode, parent task, bev Bev) task {
+func (t *bevTask) ctr(node *BevNode, parent task, bev BevInst) task {
 	assert.NotNilArg(bev, "bev")
 
 	t.taskBase.ctr(node, parent)
