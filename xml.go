@@ -5,32 +5,72 @@ import (
 	"encoding/xml"
 	"io"
 	"log"
+	"os"
 
 	"github.com/godyy/bevtree/internal/assert"
 	"github.com/pkg/errors"
 )
 
+// help function to create xml.Name in namespace bevtree.
+func createXMLName(name string) xml.Name {
+	return xml.Name{Space: "", Local: name}
+}
+
+// xml.Name for BevTree.
+var xmlNameBevTree = createXMLName("bevtree")
+
+// xml.Name for nodeType.
+var xmlNameNodeType = createXMLName("nodetype")
+
+// xml.Name for root node.
+var xmlNameRoot = createXMLName("root")
+
+// xml.Name for childs.
+var xmlNameChilds = createXMLName("childs")
+
+// xml.Name for child.
+var xmlNameChild = createXMLName("child")
+
+// xml.Name for limited.
+var xmlNameLimited = createXMLName("limited")
+
+// xml.Name for success on fail.
+var xmlNameSuccessOnFail = createXMLName("successonfail")
+
+// xml.Name for Bev.
+var xmlNameBev = createXMLName("bev")
+
+// XMLUnmarshal is the interface implemented by objects that can marshal
+// themselves into valid bevtree XML elements.
 type XMLMarshaler interface {
 	MarshalBTXML(*XMLEncoder, xml.StartElement) error
 }
 
+// XMLUnmarshaler is the interface implemented by objects that can unmarshal
+// an bevtree XML element description of themselves.
 type XMLUnmarshaler interface {
 	UnmarshalBTXML(*XMLDecoder, xml.StartElement) error
 }
 
+// BevXMLEncoder is the interface implemented by objects than can encode
+// bevtree behavior definer.
 type BevXMLEncoder interface {
-	EncodeXMLBev(*XMLEncoder, BevDefiner, xml.StartElement) error
+	EncodeXMLBev(*XMLEncoder, BevDef, xml.StartElement) error
 }
 
+// BevXMLDecoder is the interface implemented by objects than can decode
+// bevtree behavior definer.
 type BevXMLDecoder interface {
-	DecodeXMLBev(*XMLDecoder, *BevDefiner, xml.StartElement) error
+	DecodeXMLBev(*XMLDecoder, *BevDef, xml.StartElement) error
 }
 
+// An Encoder writes bevtree XML data to an output stream.
 type XMLEncoder struct {
 	*xml.Encoder
 	bevEnc BevXMLEncoder
 }
 
+// NewXMLEncoder returns a new encoder that writes to w with bevEncoder.
 func NewXMLEncoder(bevEncoder BevXMLEncoder, w io.Writer) *XMLEncoder {
 	assert.NotNilArg(bevEncoder, "bevEncoder")
 
@@ -40,14 +80,27 @@ func NewXMLEncoder(bevEncoder BevXMLEncoder, w io.Writer) *XMLEncoder {
 	}
 }
 
+// EncodeElement writes the bevtree XML encoding of v to the stream,
+// using start as the outermost tag in the encoding.
+//
+// EncodeElement calls Flush before returning.
 func (e *XMLEncoder) EncodeElement(v interface{}, start xml.StartElement) error {
 	if marshaler, ok := v.(XMLMarshaler); ok {
-		return marshaler.MarshalBTXML(e, start)
+		if err := marshaler.MarshalBTXML(e, start); err != nil {
+			return err
+		}
+
+		return e.Flush()
 	} else {
 		return e.Encoder.EncodeElement(v, start)
 	}
 }
 
+// EncodeStartEnd writes the bevtree XML encoding of v to the stream
+// between start and start.End(), using start as the outermost tag
+// in the encoding.
+//
+// EncodeStartEnd calls Flush before returning.
 func (e *XMLEncoder) EncodeStartEnd(v interface{}, start xml.StartElement) error {
 	var err error
 
@@ -63,9 +116,11 @@ func (e *XMLEncoder) EncodeStartEnd(v interface{}, start xml.StartElement) error
 		return err
 	}
 
-	return err
+	return e.Flush()
 }
 
+// EncodeTree invoke EncodeStartEnd to write the bevtree XML encoding of
+// tree to the stream.
 func (e *XMLEncoder) EncodeTree(tree *BevTree) error {
 	if tree == nil {
 		return nil
@@ -74,9 +129,14 @@ func (e *XMLEncoder) EncodeTree(tree *BevTree) error {
 	return e.EncodeStartEnd(tree, xml.StartElement{Name: xmlNameBevTree})
 }
 
-func (e *XMLEncoder) encodeNode(n node, xmlName xml.Name) error {
+// encodeNode invoke EncodeStartEnd to write the bevtree XML encoding of
+// node n to the stream with name as element name:
+// <name.Space:name.Local nodetype="nodetype">
+// ...
+// </name.Space:name.Local>
+func (e *XMLEncoder) encodeNode(n node, name xml.Name) error {
 	start := xml.StartElement{
-		Name: xmlName,
+		Name: name,
 	}
 
 	if ntAttr, err := n.nodeType().MarshalXMLAttr(xmlNameNodeType); err == nil {
@@ -88,15 +148,21 @@ func (e *XMLEncoder) encodeNode(n node, xmlName xml.Name) error {
 	return e.EncodeStartEnd(n, start)
 }
 
-func (e *XMLEncoder) encodeBev(bd BevDefiner, start xml.StartElement) error {
+// encodeBev writes the bevtree XML encoding of BevDef bd to the stream.
+func (e *XMLEncoder) encodeBev(bd BevDef, start xml.StartElement) error {
 	return e.bevEnc.EncodeXMLBev(e, bd, start)
 }
 
+// A XMLDecoder represents an bevtree XML parser reading a particular
+// input stream.
 type XMLDecoder struct {
 	*xml.Decoder
 	bevDec BevXMLDecoder
 }
 
+// NewXMLDecoder creates a new bevtree XML parser reading from r.
+// If r does not implement io.ByteReader, NewXMLDecoder will
+// do its own buffering.
 func NewXMLDecoder(bevDecoder BevXMLDecoder, r io.Reader) *XMLDecoder {
 	assert.NotNilArg(bevDecoder, "bevDecoder")
 
@@ -106,6 +172,7 @@ func NewXMLDecoder(bevDecoder BevXMLDecoder, r io.Reader) *XMLDecoder {
 	}
 }
 
+// DecodeElement read element from start to parse info v.
 func (d *XMLDecoder) DecodeElement(v interface{}, start xml.StartElement) error {
 	if unmarshal, ok := v.(XMLUnmarshaler); ok {
 		return unmarshal.UnmarshalBTXML(d, start)
@@ -114,6 +181,12 @@ func (d *XMLDecoder) DecodeElement(v interface{}, start xml.StartElement) error 
 	}
 }
 
+var errDecodeXMLStop = errors.New("decode XML stop")
+
+type decodeXMLCallback func(d *XMLDecoder, start xml.StartElement) error
+
+// DecodeEndTo read element end to endTo unless f return error.
+// If f return errDecodeXMLStop, DecodeEndTo return nil.
 func (d *XMLDecoder) DecodeEndTo(endTo xml.EndElement, f decodeXMLCallback) error {
 	var err error
 	var token xml.Token
@@ -144,6 +217,7 @@ func (d *XMLDecoder) DecodeEndTo(endTo xml.EndElement, f decodeXMLCallback) erro
 	return err
 }
 
+// DecodeTree read element from input stream and parse into t.
 func (d *XMLDecoder) DecodeTree(t *BevTree) error {
 	if t == nil {
 		return nil
@@ -162,6 +236,13 @@ func (d *XMLDecoder) DecodeTree(t *BevTree) error {
 	})
 }
 
+func errXMLAttrNotFound(attrName xml.Name) error {
+	return errors.Errorf("attr %s:%s not found", attrName.Space, attrName.Local)
+}
+
+// decodeNode parse nodetype attr from start, then create node
+// based on nodetype, finally invoke node.UnmarshalBTXML and
+// set *pnode to node.
 func (d *XMLDecoder) decodeNode(pnode *node, start xml.StartElement) error {
 	var err error
 
@@ -196,24 +277,17 @@ func (d *XMLDecoder) decodeNode(pnode *node, start xml.StartElement) error {
 	return nil
 }
 
-func (d *XMLDecoder) decodeBev(pbd *BevDefiner, start xml.StartElement) error {
+// decodeBev parse element from start to create BevDef.
+func (d *XMLDecoder) decodeBev(pbd *BevDef, start xml.StartElement) error {
 	return d.bevDec.DecodeXMLBev(d, pbd, start)
 }
 
-var errXMLValueTypeNotSupported = errors.New("xml: value type not supported")
-
-var errDecodeXMLStop = errors.New("decode XML stop")
-
-type decodeXMLCallback func(d *XMLDecoder, start xml.StartElement) error
-
-func createXMLName(name string) xml.Name {
-	return xml.Name{"", name}
-}
-
+// marshal t to valid XML attribute.
 func (t nodeType) MarshalXMLAttr(name xml.Name) (xml.Attr, error) {
 	return xml.Attr{Name: name, Value: t.String()}, nil
 }
 
+// unmarshal an XML attribute to t.
 func (t *nodeType) UnmarshalXMLAttr(attr xml.Attr) error {
 	if nt, ok := nodeString2Types[attr.Value]; ok {
 		*t = nt
@@ -223,10 +297,16 @@ func (t *nodeType) UnmarshalXMLAttr(attr xml.Attr) error {
 	}
 }
 
-var xmlNameNodeType = createXMLName("nodetype")
-var xmlNameBevTree = createXMLName("bevtree")
+// MarshalXMLBevTree return an bevtree XML encoding of t.
+func MarshalXMLBevTree(t *BevTree, bevEncoder BevXMLEncoder) ([]byte, error) {
+	if t == nil {
+		return nil, nil
+	}
 
-func marshalXMLBevTree(t *BevTree, bevEncoder BevXMLEncoder) ([]byte, error) {
+	if bevEncoder == nil {
+		return nil, errors.New("bevEncoder nil")
+	}
+
 	var buf = bytes.NewBuffer(nil)
 	e := NewXMLEncoder(bevEncoder, buf)
 	e.Indent("", "    ")
@@ -240,19 +320,80 @@ func marshalXMLBevTree(t *BevTree, bevEncoder BevXMLEncoder) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func unmarshalXMLBevTree(data []byte, t *BevTree, bevDecoder BevXMLDecoder) error {
+// UnmarshalXMLBevTree parses the bevtree XML-encoded BevTree
+// data and stores the result in the BevTree pointed to by t.
+func UnmarshalXMLBevTree(data []byte, t *BevTree, bevDecoder BevXMLDecoder) error {
+	if data == nil || t == nil {
+		return nil
+	}
+
+	if bevDecoder == nil {
+		return errors.New("bevDecoder nil")
+	}
+
 	var buf = bytes.NewReader(data)
 	d := NewXMLDecoder(bevDecoder, buf)
 	return d.DecodeTree(t)
 }
 
-var xmlNameNode = createXMLName("node")
+// EncodeBevTreeXMLFile works like MarshalXMLBevTree but write
+// encoded data to file.
+func EncodeBevTreeXMLFile(path string, t *BevTree, bevEncoder BevXMLEncoder) error {
+	if t == nil {
+		return nil
+	}
 
-func errXMLAttrNotFound(attrName xml.Name) error {
-	return errors.Errorf("attr %s:%s not found", attrName.Space, attrName.Local)
+	if bevEncoder == nil {
+		return errors.New("bevEncoder nil")
+	}
+
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+
+	enc := NewXMLEncoder(bevEncoder, file)
+	if err := enc.EncodeTree(t); err != nil {
+		file.Close()
+		return errors.WithMessage(err, "encode tree")
+	}
+
+	if err := enc.Flush(); err != nil {
+		file.Close()
+		return errors.WithMessage(err, "flush")
+	}
+
+	if err := file.Close(); err != nil {
+		return errors.WithMessage(err, "file close")
+	}
+
+	return nil
 }
 
-var xmlNameRoot = createXMLName("root")
+// DecodeBevTreeXMLFile works like UnmarshalXMLBevTree but read
+// encoded data from file.
+func DecodeBevTreeXMLFile(path string, t *BevTree, bevDecoder BevXMLDecoder) error {
+	if t == nil {
+		return nil
+	}
+
+	if bevDecoder == nil {
+		return errors.New("bevDecoder nil")
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	dec := NewXMLDecoder(bevDecoder, file)
+	if err := dec.DecodeTree(t); err != nil {
+		return errors.WithMessage(err, "decode tree")
+	}
+
+	return nil
+}
 
 func (t *BevTree) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 	if err := e.EncodeStartEnd(t.root_, xml.StartElement{Name: xmlNameRoot}); err != nil {
@@ -267,29 +408,33 @@ func (t *BevTree) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 		log.Printf("BevTree.UnmarshalBTXML start:%v", start)
 	}
 
+	rootDecoded := false
 	if err := d.DecodeEndTo(start.End(), func(d *XMLDecoder, start xml.StartElement) error {
 		if start.Name == xmlNameRoot {
 			if debug {
 				log.Printf("BevTree.UnmarshalBTXML root:%v", start)
 			}
 
-			t.root_ = newRoot()
+			if t.root_ == nil {
+				t.root_ = newRoot()
+			}
+
 			if err := d.DecodeElement(t.root_, start); err != nil {
 				return errors.WithMessage(err, "unmarshal root")
 			}
+
+			rootDecoded = true
 		}
 
 		return nil
 	}); err != nil {
 		return err
-	} else if t.root_ == nil {
+	} else if !rootDecoded {
 		return errors.New("no root")
 	} else {
 		return nil
 	}
 }
-
-var xmlNameChild = createXMLName("child")
 
 func (n *oneChildNodeBase) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 	if n.child == nil {
@@ -303,10 +448,10 @@ func (n *oneChildNodeBase) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement)
 	if debug {
 		log.Printf("oneChildNodeBase.UnmarshalBTXML start:%v", start)
 	}
-	return d.DecodeEndTo(start.End(), n.unmarshalBTXML)
+	return d.DecodeEndTo(start.End(), n.onDecodeXMLElement)
 }
 
-func (n *oneChildNodeBase) unmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
+func (n *oneChildNodeBase) onDecodeXMLElement(d *XMLDecoder, start xml.StartElement) error {
 	if start.Name == xmlNameChild {
 		var child node
 		if err := d.decodeNode(&child, start); err != nil {
@@ -318,8 +463,6 @@ func (n *oneChildNodeBase) unmarshalBTXML(d *XMLDecoder, start xml.StartElement)
 
 	return nil
 }
-
-var xmlNameLimited = createXMLName("limited")
 
 func (r *RepeaterNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 	if debug {
@@ -340,10 +483,10 @@ func (r *RepeaterNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) err
 		log.Printf("RepeaterNode.UnmarshalBTXML start:%v", start)
 	}
 
-	return d.DecodeEndTo(start.End(), r.unmarshalBTXML)
+	return d.DecodeEndTo(start.End(), r.onDecodeXMLElement)
 }
 
-func (r *RepeaterNode) unmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
+func (r *RepeaterNode) onDecodeXMLElement(d *XMLDecoder, start xml.StartElement) error {
 	if start.Name == xmlNameLimited {
 		if debug {
 			log.Printf("RepeaterNode.unmarshalBTXML limited")
@@ -355,11 +498,9 @@ func (r *RepeaterNode) unmarshalBTXML(d *XMLDecoder, start xml.StartElement) err
 
 		return nil
 	} else {
-		return r.decoratorNodeBase.unmarshalBTXML(d, start)
+		return r.decoratorNodeBase.onDecodeXMLElement(d, start)
 	}
 }
-
-var xmlNameSuccessOnFail = createXMLName("successonfail")
 
 func (r *RepeatUntilFailNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 	if debug {
@@ -380,10 +521,10 @@ func (r *RepeatUntilFailNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartEleme
 		log.Printf("RepeatUntilFailNode.UnmarshalBTXML start:%v", start)
 	}
 
-	return d.DecodeEndTo(start.End(), r.unmarshalBTXML)
+	return d.DecodeEndTo(start.End(), r.onDecodeXMLElement)
 }
 
-func (r *RepeatUntilFailNode) unmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
+func (r *RepeatUntilFailNode) onDecodeXMLElement(d *XMLDecoder, start xml.StartElement) error {
 	if start.Name == xmlNameSuccessOnFail {
 		if debug {
 			log.Printf("RepeatUntilFailNodee.unmarshalBTXML successOnFail start:%v", start)
@@ -395,11 +536,9 @@ func (r *RepeatUntilFailNode) unmarshalBTXML(d *XMLDecoder, start xml.StartEleme
 
 		return nil
 	} else {
-		return r.decoratorNodeBase.unmarshalBTXML(d, start)
+		return r.decoratorNodeBase.onDecodeXMLElement(d, start)
 	}
 }
-
-var xmlNameChilds = createXMLName("childs")
 
 func (c *compositeNodeBase) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 	if c.childCount > 0 {
@@ -428,10 +567,10 @@ func (c *compositeNodeBase) MarshalBTXML(e *XMLEncoder, start xml.StartElement) 
 }
 
 func (c *compositeNodeBase) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
-	return d.DecodeEndTo(start.End(), c.unmarshalBTXML)
+	return d.DecodeEndTo(start.End(), c.onDecodeXMLElement)
 }
 
-func (c *compositeNodeBase) unmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
+func (c *compositeNodeBase) onDecodeXMLElement(d *XMLDecoder, start xml.StartElement) error {
 	if start.Name == xmlNameChilds {
 		return d.DecodeEndTo(start.End(), func(d *XMLDecoder, start xml.StartElement) error {
 			if start.Name == xmlNameChild {
@@ -450,8 +589,6 @@ func (c *compositeNodeBase) unmarshalBTXML(d *XMLDecoder, start xml.StartElement
 
 	return nil
 }
-
-var xmlNameBev = createXMLName("bev")
 
 func (b *BevNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 	if debug {

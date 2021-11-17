@@ -52,7 +52,7 @@ func TestTaskPool(t *testing.T) {
 }
 
 func TestReset(t *testing.T) {
-	tree := NewTree()
+	tree := NewBevTree()
 
 	paral := NewParallel()
 

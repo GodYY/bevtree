@@ -12,21 +12,21 @@ type Bev interface {
 	OnTerminate(*Env)
 }
 
-type BevDefiner interface {
+type BevDef interface {
 	CreateBev() Bev
 	DestroyBev(Bev)
 }
 
 type BevNode struct {
 	nodeBase
-	bevDef BevDefiner
+	bevDef BevDef
 }
 
 func newBev() *BevNode {
 	return &BevNode{}
 }
 
-func NewBev(bevDef BevDefiner) *BevNode {
+func NewBev(bevDef BevDef) *BevNode {
 	assert.NotNilArg(bevDef, "bevDef")
 
 	return &BevNode{

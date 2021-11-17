@@ -13,10 +13,10 @@ type test struct {
 
 func newTest() *test {
 	t := &test{
-		tree: NewTree(),
+		tree: NewBevTree(),
 		e:    NewEnv(nil),
 	}
-	t.tree = NewTree()
+	t.tree = NewBevTree()
 	return t
 }
 
@@ -384,7 +384,7 @@ func (d *behaviorIncrDefiner) DestroyBev(Bev) {}
 
 func TestShareTree(t *testing.T) {
 
-	tree := NewTree()
+	tree := NewBevTree()
 	paral := NewParallel()
 	tree.root().SetChild(paral)
 

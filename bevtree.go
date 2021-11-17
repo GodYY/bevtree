@@ -604,7 +604,7 @@ type BevTree struct {
 	root_ *rootNode
 }
 
-func NewTree() *BevTree {
+func NewBevTree() *BevTree {
 	tree := &BevTree{
 		root_: newRoot(),
 	}

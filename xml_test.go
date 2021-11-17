@@ -86,11 +86,11 @@ func (bd *bevBBIncrDef) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) er
 type bevCoder struct {
 }
 
-func (c *bevCoder) EncodeXMLBev(e *XMLEncoder, bd BevDefiner, start xml.StartElement) error {
+func (c *bevCoder) EncodeXMLBev(e *XMLEncoder, bd BevDef, start xml.StartElement) error {
 	return e.EncodeStartEnd(bd, start)
 }
 
-func (c *bevCoder) DecodeXMLBev(d *XMLDecoder, pbd *BevDefiner, start xml.StartElement) error {
+func (c *bevCoder) DecodeXMLBev(d *XMLDecoder, pbd *BevDef, start xml.StartElement) error {
 	bd := &bevBBIncrDef{}
 	if err := d.DecodeElement(bd, start); err != nil {
 		return err
@@ -109,7 +109,7 @@ func TestBevTreeMarshalXML(t *testing.T) {
 
 	rand.Seed(time.Now().UnixNano())
 
-	tree := NewTree()
+	tree := NewBevTree()
 	paral := NewParallel()
 	tree.root().SetChild(paral)
 
@@ -174,7 +174,7 @@ func TestBevTreeMarshalXML(t *testing.T) {
 		t.Fatalf("test BevTree before marshal: sum(%d) != %d", env.Val(key).(int), sum)
 	}
 
-	data, err := marshalXMLBevTree(tree, &bevCoder{})
+	data, err := MarshalXMLBevTree(tree, &bevCoder{})
 	if err != nil {
 		t.Fatal("marshal BevTree:", err)
 	} else {
@@ -182,7 +182,7 @@ func TestBevTreeMarshalXML(t *testing.T) {
 	}
 
 	newTree := new(BevTree)
-	if err := unmarshalXMLBevTree(data, newTree, &bevCoder{}); err != nil {
+	if err := UnmarshalXMLBevTree(data, newTree, &bevCoder{}); err != nil {
 		t.Fatal("unmarshal previos BevTree:", err)
 	}
 
