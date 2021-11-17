@@ -99,7 +99,7 @@ func TestSequence(t *testing.T) {
 
 	seq := NewSequence()
 
-	test.tree.root().SetChild(seq)
+	test.tree.Root().SetChild(seq)
 
 	key := "counter"
 	test.e.DataCtx().Set(key, 0)
@@ -120,7 +120,7 @@ func TestSelector(t *testing.T) {
 
 	selc := NewSelector()
 
-	test.tree.root().SetChild(selc)
+	test.tree.Root().SetChild(selc)
 
 	key := "selected"
 	var selected int
@@ -150,7 +150,7 @@ func TestRandomSequence(t *testing.T) {
 
 	seq := NewRandSequence()
 
-	test.tree.root().SetChild(seq)
+	test.tree.Root().SetChild(seq)
 
 	key := "counter"
 	test.e.DataCtx().Set(key, 0)
@@ -175,7 +175,7 @@ func TestRandomSelector(t *testing.T) {
 
 	selc := NewRandSelector()
 
-	test.tree.root().SetChild(selc)
+	test.tree.Root().SetChild(selc)
 
 	key := "selected"
 	var selected int
@@ -204,7 +204,7 @@ func TestParallel(t *testing.T) {
 
 	paral := NewParallel()
 
-	test.tree.root().SetChild(paral)
+	test.tree.Root().SetChild(paral)
 
 	rand.Seed(time.Now().Unix())
 
@@ -232,7 +232,7 @@ func TestParallelLazyStop(t *testing.T) {
 
 	paral := NewParallel()
 
-	test.tree.root().SetChild(paral)
+	test.tree.Root().SetChild(paral)
 
 	rand.Seed(time.Now().Unix())
 
@@ -273,7 +273,7 @@ func TestRepeater(t *testing.T) {
 	n := 10
 	repeater := NewRepeater(n)
 
-	test.tree.root().SetChild(repeater)
+	test.tree.Root().SetChild(repeater)
 
 	key := "counter"
 	test.e.DataCtx().Set(key, 0)
@@ -292,7 +292,7 @@ func TestInverter(t *testing.T) {
 
 	inverter := NewInverter()
 
-	test.tree.root().SetChild(inverter)
+	test.tree.Root().SetChild(inverter)
 
 	inverter.SetChild(NewBev(newBevFuncDefiner(func(e *Env) Result {
 		return RFailure
@@ -305,7 +305,7 @@ func TestSucceeder(t *testing.T) {
 	test := newTest()
 
 	succeeder := NewSucceeder()
-	test.tree.root().SetChild(succeeder)
+	test.tree.Root().SetChild(succeeder)
 
 	succeeder.SetChild(NewBev(newBevFuncDefiner(func(e *Env) Result { return RFailure })))
 
@@ -316,7 +316,7 @@ func TestRepeatUntilFail(t *testing.T) {
 	test := newTest()
 
 	repeat := NewRepeatUntilFail(false)
-	test.tree.root().SetChild(repeat)
+	test.tree.Root().SetChild(repeat)
 
 	n := 4
 	repeat.SetChild(NewBev(newBevFuncDefiner(func(e *Env) Result {
@@ -386,7 +386,7 @@ func TestShareTree(t *testing.T) {
 
 	tree := NewBevTree()
 	paral := NewParallel()
-	tree.root().SetChild(paral)
+	tree.Root().SetChild(paral)
 
 	expectedResult := RSuccess
 	singleSum := 0

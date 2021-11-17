@@ -111,7 +111,7 @@ func TestBevTreeMarshalXML(t *testing.T) {
 
 	tree := NewBevTree()
 	paral := NewParallel()
-	tree.root().SetChild(paral)
+	tree.Root().SetChild(paral)
 
 	bd := newBevBBIncrDef(key, unit)
 

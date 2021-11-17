@@ -611,7 +611,7 @@ func NewBevTree() *BevTree {
 	return tree
 }
 
-func (t *BevTree) root() *rootNode { return t.root_ }
+func (t *BevTree) Root() *rootNode { return t.root_ }
 
 func (t *BevTree) Clear() {
 	t.root_.SetChild(nil)

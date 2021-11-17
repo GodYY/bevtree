@@ -13,7 +13,7 @@ func TestTaskPool(t *testing.T) {
 
 	paral := NewParallel()
 
-	test.tree.root().SetChild(paral)
+	test.tree.Root().SetChild(paral)
 
 	rand.Seed(time.Now().Unix())
 
@@ -56,7 +56,7 @@ func TestReset(t *testing.T) {
 
 	paral := NewParallel()
 
-	tree.root().SetChild(paral)
+	tree.Root().SetChild(paral)
 
 	rand.Seed(time.Now().Unix())
 
