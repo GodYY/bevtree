@@ -29,39 +29,39 @@ func newBev() *BevNode {
 }
 
 func NewBev(bev Bev) *BevNode {
-	assert.NotNilArg(bev, "bev")
+	assert.Assert(bev != nil, "bev nil")
 
 	return &BevNode{
 		bev: bev,
 	}
 }
 
-func (BevNode) nodeType() nodeType        { return ntBehavior }
+func (BevNode) NodeType() NodeType        { return behavior }
 func (BevNode) ChildCount() int           { return 0 }
-func (BevNode) AddChild(node)             {}
-func (BevNode) RemoveChild(node)          {}
-func (BevNode) AddChildBefore(_, _ node)  {}
-func (BevNode) AddChildAfter(_, _ node)   {}
-func (BevNode) MoveChildBefore(_, _ node) {}
-func (BevNode) MoveChildAfter(_, _ node)  {}
-func (BevNode) FirstChild() node          { return nil }
-func (BevNode) LastChild() node           { return nil }
+func (BevNode) AddChild(Node)             {}
+func (BevNode) RemoveChild(Node)          {}
+func (BevNode) AddChildBefore(_, _ Node)  {}
+func (BevNode) AddChildAfter(_, _ Node)   {}
+func (BevNode) MoveChildBefore(_, _ Node) {}
+func (BevNode) MoveChildAfter(_, _ Node)  {}
+func (BevNode) FirstChild() Node          { return nil }
+func (BevNode) LastChild() Node           { return nil }
 
-func (b *BevNode) createTask(parent task) task {
+func (b *BevNode) CreateTask(parent Task) Task {
 	bev := b.bev.CreateBev()
-	assert.NotNil(bev, "bev create nil bevInst")
+	assert.Assert(bev != nil, "bev create nil bevInst")
 
 	return bevTaskPool.get().(*bevTask).ctr(b, parent, bev)
 }
 
-func (b *BevNode) destroyTask(t task) {
+func (b *BevNode) DestroyTask(t Task) {
 	bt := t.(*bevTask)
 	b.bev.DestroyBev(bt.bev)
 	bt.dtr()
 	bevTaskPool.put(t)
 }
 
-var bevTaskPool = newTaskPool(func() task { return newBevTask() })
+var bevTaskPool = newTaskPool(func() Task { return newBevTask() })
 
 type bevTask struct {
 	taskBase
@@ -72,8 +72,8 @@ func newBevTask() *bevTask {
 	return new(bevTask)
 }
 
-func (t *bevTask) ctr(node *BevNode, parent task, bev BevInst) task {
-	assert.NotNilArg(bev, "bev")
+func (t *bevTask) ctr(node *BevNode, parent Task, bev BevInst) Task {
+	assert.Assert(bev != nil, "bev nil")
 
 	t.taskBase.ctr(node, parent)
 	t.bev = bev
@@ -154,7 +154,7 @@ func (t *bevTask) doLazyStop(e *Env) Result {
 	return RFailure
 }
 
-func (t *bevTask) childOver(_ task, _ Result, _ *Env) Result {
+func (t *bevTask) childOver(_ Task, _ Result, _ *Env) Result {
 	panic("should not be called")
 }
 
@@ -165,5 +165,5 @@ func (t *bevTask) destroy() {
 	}
 
 	t.st = sDestroyed
-	t.node.destroyTask(t)
+	t.node.DestroyTask(t)
 }

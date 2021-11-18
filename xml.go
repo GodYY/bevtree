@@ -72,7 +72,8 @@ type XMLEncoder struct {
 
 // NewXMLEncoder returns a new encoder that writes to w with bevEncoder.
 func NewXMLEncoder(bevEncoder BevXMLEncoder, w io.Writer) *XMLEncoder {
-	assert.NotNilArg(bevEncoder, "bevEncoder")
+	assert.Assert(bevEncoder != nil, "bevEncoder nil")
+	assert.Assert(w != nil, "writer nil")
 
 	return &XMLEncoder{
 		Encoder: xml.NewEncoder(w),
@@ -134,12 +135,12 @@ func (e *XMLEncoder) EncodeTree(tree *BevTree) error {
 // <name.Space:name.Local nodetype="nodetype">
 // ...
 // </name.Space:name.Local>
-func (e *XMLEncoder) encodeNode(n node, name xml.Name) error {
+func (e *XMLEncoder) encodeNode(n Node, name xml.Name) error {
 	start := xml.StartElement{
 		Name: name,
 	}
 
-	if ntAttr, err := n.nodeType().MarshalXMLAttr(xmlNameNodeType); err == nil {
+	if ntAttr, err := n.NodeType().MarshalXMLAttr(xmlNameNodeType); err == nil {
 		start.Attr = append(start.Attr, ntAttr)
 	} else {
 		return err
@@ -164,7 +165,8 @@ type XMLDecoder struct {
 // If r does not implement io.ByteReader, NewXMLDecoder will
 // do its own buffering.
 func NewXMLDecoder(bevDecoder BevXMLDecoder, r io.Reader) *XMLDecoder {
-	assert.NotNilArg(bevDecoder, "bevDecoder")
+	assert.Assert(bevDecoder != nil, "bevDecoder nil")
+	assert.Assert(r != nil, "reader nil")
 
 	return &XMLDecoder{
 		Decoder: xml.NewDecoder(r),
@@ -243,10 +245,10 @@ func errXMLAttrNotFound(attrName xml.Name) error {
 // decodeNode parse nodetype attr from start, then create node
 // based on nodetype, finally invoke node.UnmarshalBTXML and
 // set *pnode to node.
-func (d *XMLDecoder) decodeNode(pnode *node, start xml.StartElement) error {
+func (d *XMLDecoder) decodeNode(pnode *Node, start xml.StartElement) error {
 	var err error
 
-	var nt nodeType
+	var nt NodeType
 	foundNT := false
 	for _, attr := range start.Attr {
 		if attr.Name == xmlNameNodeType {
@@ -283,14 +285,14 @@ func (d *XMLDecoder) decodeBev(pbd *Bev, start xml.StartElement) error {
 }
 
 // marshal t to valid XML attribute.
-func (t nodeType) MarshalXMLAttr(name xml.Name) (xml.Attr, error) {
+func (t NodeType) MarshalXMLAttr(name xml.Name) (xml.Attr, error) {
 	return xml.Attr{Name: name, Value: t.String()}, nil
 }
 
 // unmarshal an XML attribute to t.
-func (t *nodeType) UnmarshalXMLAttr(attr xml.Attr) error {
-	if nt, ok := nodeString2Types[attr.Value]; ok {
-		*t = nt
+func (t *NodeType) UnmarshalXMLAttr(attr xml.Attr) error {
+	if meta, ok := nodeName2META[attr.Value]; ok {
+		*t = meta.typ
 		return nil
 	} else {
 		return errors.Errorf("invalid nodeType %s", attr.Value)
@@ -453,7 +455,7 @@ func (n *oneChildNodeBase) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement)
 
 func (n *oneChildNodeBase) onDecodeXMLElement(d *XMLDecoder, start xml.StartElement) error {
 	if start.Name == xmlNameChild {
-		var child node
+		var child Node
 		if err := d.decodeNode(&child, start); err != nil {
 			return errors.WithMessage(err, "unmarshal child")
 		}
@@ -574,7 +576,7 @@ func (c *compositeNodeBase) onDecodeXMLElement(d *XMLDecoder, start xml.StartEle
 	if start.Name == xmlNameChilds {
 		return d.DecodeEndTo(start.End(), func(d *XMLDecoder, start xml.StartElement) error {
 			if start.Name == xmlNameChild {
-				var node node
+				var node Node
 				if err := d.decodeNode(&node, start); err != nil {
 					return errors.WithMessagef(err, "unmarshal %d child", c.childCount)
 				}

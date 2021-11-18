@@ -2,11 +2,11 @@
 
 package bevtree
 
-func (p *taskPool) get() task {
-	return p.p.Get().(task)
+func (p *taskPool) get() Task {
+	return p.p.Get().(Task)
 }
 
-func (p *taskPool) put(task task) {
+func (p *taskPool) put(task Task) {
 	p.p.Put(task)
 }
 

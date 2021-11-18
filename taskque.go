@@ -2,7 +2,7 @@ package bevtree
 
 type taskQueElem struct {
 	q    *taskQue
-	task task
+	task Task
 	prev *taskQueElem
 	next *taskQueElem
 }
@@ -51,8 +51,8 @@ func (q *taskQue) getLen() int { return q.len }
 
 func (q *taskQue) empty() bool { return q.len == 0 }
 
-func (q *taskQue) clear(fs ...func(task)) {
-	var f func(task)
+func (q *taskQue) clear(fs ...func(Task)) {
+	var f func(Task)
 	if len(fs) > 0 {
 		f = fs[0]
 	}
@@ -85,38 +85,38 @@ func (q *taskQue) back() *taskQueElem {
 	return q.root.prev
 }
 
-func (q *taskQue) frontTask() task {
+func (q *taskQue) frontTask() Task {
 	if q.len == 0 {
 		return nil
 	}
 	return q.root.next.task
 }
 
-func (q *taskQue) backTask() task {
+func (q *taskQue) backTask() Task {
 	if q.len == 0 {
 		return nil
 	}
 	return q.root.prev.task
 }
 
-func (q *taskQue) pushFront(task task) *taskQueElem {
+func (q *taskQue) pushFront(task Task) *taskQueElem {
 	q.lazyInit()
 	return q.insertTask(task, &q.root)
 }
 
-func (q *taskQue) pushBack(task task) *taskQueElem {
+func (q *taskQue) pushBack(task Task) *taskQueElem {
 	q.lazyInit()
 	return q.insertTask(task, q.root.prev)
 }
 
-func (q *taskQue) insertBefore(task task, e *taskQueElem) *taskQueElem {
+func (q *taskQue) insertBefore(task Task, e *taskQueElem) *taskQueElem {
 	if e.q != q {
 		return nil
 	}
 	return q.insertTask(task, e.prev)
 }
 
-func (q *taskQue) insertAfter(task task, e *taskQueElem) *taskQueElem {
+func (q *taskQue) insertAfter(task Task, e *taskQueElem) *taskQueElem {
 	if e.q != q {
 		return nil
 	}
@@ -133,7 +133,7 @@ func (q *taskQue) insert(e, at *taskQueElem) *taskQueElem {
 	return e
 }
 
-func (q *taskQue) insertTask(task task, at *taskQueElem) *taskQueElem {
+func (q *taskQue) insertTask(task Task, at *taskQueElem) *taskQueElem {
 	elem := getTaskQueElem()
 	elem.task = task
 	return q.insert(elem, at)
@@ -185,7 +185,7 @@ func (q *taskQue) moveAfter(e, mark *taskQueElem) {
 	q.move(e, mark)
 }
 
-func (q *taskQue) remove_(e *taskQueElem) task {
+func (q *taskQue) remove_(e *taskQueElem) Task {
 	task := e.task
 	e.prev.next = e.next
 	e.next.prev = e.prev
@@ -198,7 +198,7 @@ func (q *taskQue) remove_(e *taskQueElem) task {
 	return task
 }
 
-func (q *taskQue) remove(e *taskQueElem) task {
+func (q *taskQue) remove(e *taskQueElem) Task {
 	if e == nil || e.q != q {
 		return nil
 	}
@@ -206,7 +206,7 @@ func (q *taskQue) remove(e *taskQueElem) task {
 	return q.remove_(e)
 }
 
-func (q *taskQue) popFrontTask() task {
+func (q *taskQue) popFrontTask() Task {
 	if q.len == 0 {
 		return nil
 	}
@@ -216,7 +216,7 @@ func (q *taskQue) popFrontTask() task {
 	return task
 }
 
-func (q *taskQue) popBackTask() task {
+func (q *taskQue) popBackTask() Task {
 	if q.len == 0 {
 		return nil
 	}

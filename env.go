@@ -74,8 +74,8 @@ func (e *Env) lazyPushUpdateBoundary() {
 	}
 }
 
-func (e *Env) pushTask(task task, nextRounds ...bool) {
-	assert.NotNilArg(task, "task")
+func (e *Env) pushTask(task Task, nextRounds ...bool) {
+	assert.Assert(task != nil, "task nil")
 
 	e.lazyPushUpdateBoundary()
 
@@ -105,11 +105,11 @@ func (e *Env) pushTask(task task, nextRounds ...bool) {
 	task.setQueElem(elem)
 }
 
-func (e *Env) pushCurrentTask(task task) {
+func (e *Env) pushCurrentTask(task Task) {
 	e.pushTask(task)
 }
 
-func (e *Env) popCurrentTask() task {
+func (e *Env) popCurrentTask() Task {
 	e.lazyPushUpdateBoundary()
 
 	if e.taskQue.front() == e.taskUpdateBoundary {
@@ -125,11 +125,11 @@ func (e *Env) popCurrentTask() task {
 	return node
 }
 
-func (e *Env) pushNextTask(task task) {
+func (e *Env) pushNextTask(task Task) {
 	e.pushTask(task, true)
 }
 
-func (e *Env) removeTask(task task) {
+func (e *Env) removeTask(task Task) {
 	elem := task.getQueElem()
 	if elem != nil {
 		e.taskQue.remove(elem)
@@ -144,7 +144,7 @@ func (e *Env) clearTask() {
 			continue
 		}
 
-		assert.True(task.isBehavior(), "task is not behavior")
+		assert.Assert(task.isBehavior(), "task is not behavior")
 
 		for task != nil {
 			parent := task.getParent()
