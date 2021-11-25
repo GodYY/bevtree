@@ -4,14 +4,15 @@ package bevtree
 
 import (
 	"math/rand"
+	"runtime"
 	"testing"
 	"time"
 )
 
-func TestTaskPool(t *testing.T) {
+func TestPool(t *testing.T) {
 	test := newTest()
 
-	paral := NewParallel()
+	paral := NewParallelNode()
 
 	test.tree.Root().SetChild(paral)
 
@@ -22,39 +23,36 @@ func TestTaskPool(t *testing.T) {
 	lowDepth, maxDepth := 5, 10
 	for i := 0; i < n; i++ {
 		ut := lowUpdate + rand.Intn(maxUpdate-lowUpdate+1)
-		c := oneChildNode(NewInverter())
+		c := DecoratorNode(NewInverterNode())
 		paral.AddChild(c)
 
 		depth := 5 + rand.Intn(maxDepth-lowDepth)
 		for d := 0; d < depth; d++ {
-			cc := NewSucceeder()
+			cc := NewSucceederNode()
 			c.SetChild(cc)
 			c = cc
 		}
 
-		c.SetChild(NewBev(newBehaviorUpdateDefiner(ut)))
+		c.SetChild(NewBevNode(newBehaviorUpdate(ut)))
 	}
 
 	test.run(t, RFailure, nil, 50)
 	test.close()
 
-	if getTaskTotalGetTimes() != getTaskTotalPutTimes() {
-		t.Fatalf("taskTotalGetTimes(%d) != taskTotalPutTimes(%d), memory leak", getTaskTotalGetTimes(), getTaskTotalPutTimes())
+	getTotal := _poolDebug.getTotal()
+	putTotal := _poolDebug.putTotal()
+	loseTotal := getTotal - putTotal
+	if loseTotal > 0 {
+		t.Fatalf("get: %d put: %d lose:%d", getTotal, putTotal, loseTotal)
 	} else {
-		t.Logf("taskTotalGetTimes(%d) == taskTotalPutTimes(%d)", getTaskTotalGetTimes(), getTaskTotalPutTimes())
-	}
-
-	if getTaskElemTotalGetTimes() != getTaskElemTotalPutTimes() {
-		t.Fatalf("taskElemTotalGetTimes(%d) != taskElemTotalPutTimes(%d), memory leak", getTaskElemTotalGetTimes(), getTaskElemTotalPutTimes())
-	} else {
-		t.Logf("taskElemTotalGetTimes(%d) == taskElemTotalPutTimes(%d)", getTaskElemTotalGetTimes(), getTaskElemTotalPutTimes())
+		t.Logf("get==put: %d", getTotal)
 	}
 }
 
-func TestReset(t *testing.T) {
+func TestDebugReset(t *testing.T) {
 	tree := NewBevTree()
 
-	paral := NewParallel()
+	paral := NewParallelNode()
 
 	tree.Root().SetChild(paral)
 
@@ -65,35 +63,78 @@ func TestReset(t *testing.T) {
 	lowDepth, maxDepth := 5, 10
 	for i := 0; i < n; i++ {
 		ut := lowUpdate + rand.Intn(maxUpdate-lowUpdate+1)
-		c := oneChildNode(NewInverter())
+		c := DecoratorNode(NewInverterNode())
 		paral.AddChild(c)
 
 		depth := 5 + rand.Intn(maxDepth-lowDepth)
 		for d := 0; d < depth; d++ {
-			cc := NewSucceeder()
+			cc := NewSucceederNode()
 			c.SetChild(cc)
 			c = cc
 		}
 
-		c.SetChild(NewBev(newBehaviorUpdateDefiner(ut)))
+		c.SetChild(NewBevNode(newBehaviorUpdate(ut)))
 	}
 
-	e := NewEnv(nil)
+	e := NewContext(nil)
 
 	for i := 0; i < 100; i++ {
 		tree.Update(e)
 		tree.Stop(e)
 
-		if getTaskTotalGetTimes() != getTaskTotalPutTimes() {
-			t.Fatalf("No.%d taskTotalGetTimes(%d) != taskTotalPutTimes(%d), memory leak", i, getTaskTotalGetTimes(), getTaskTotalPutTimes())
+		getTotal := _poolDebug.getTotal()
+		putTotal := _poolDebug.putTotal()
+		loseTotal := getTotal - putTotal
+		if loseTotal > 0 {
+			t.Fatalf("get: %d put: %d lose:%d", getTotal, putTotal, loseTotal)
 		} else {
-			t.Logf("No.%d taskTotalGetTimes(%d) == taskTotalPutTimes(%d)", i, getTaskTotalGetTimes(), getTaskTotalPutTimes())
+			t.Logf("get==put: %d", getTotal)
+		}
+	}
+}
+
+func TestEnvFinalize(t *testing.T) {
+	tree := NewBevTree()
+
+	paral := NewParallelNode()
+
+	tree.Root().SetChild(paral)
+
+	rand.Seed(time.Now().Unix())
+
+	lowUpdate, maxUpdate := 2, 10
+	n := 10
+	lowDepth, maxDepth := 5, 10
+	for i := 0; i < n; i++ {
+		ut := lowUpdate + rand.Intn(maxUpdate-lowUpdate+1)
+		c := DecoratorNode(NewInverterNode())
+		paral.AddChild(c)
+
+		depth := 5 + rand.Intn(maxDepth-lowDepth)
+		for d := 0; d < depth; d++ {
+			cc := NewSucceederNode()
+			c.SetChild(cc)
+			c = cc
 		}
 
-		if getTaskElemTotalGetTimes() != getTaskElemTotalPutTimes() {
-			t.Fatalf("No.%d taskElemTotalGetTimes(%d) != taskElemTotalPutTimes(%d), memory leak", i, getTaskElemTotalGetTimes(), getTaskElemTotalPutTimes())
-		} else {
-			t.Logf("No.%d taskElemTotalGetTimes(%d) == taskElemTotalPutTimes(%d)", i, getTaskElemTotalGetTimes(), getTaskElemTotalPutTimes())
-		}
+		c.SetChild(NewBevNode(newBehaviorUpdate(ut)))
+	}
+
+	for i := 0; i < 100; i++ {
+		e := NewContext(nil)
+		tree.Update(e)
+		tree.Stop(e)
+	}
+
+	runtime.GC()
+	time.Sleep(1 * time.Second)
+
+	getTotal := _poolDebug.getTotal()
+	putTotal := _poolDebug.putTotal()
+	loseTotal := getTotal - putTotal
+	if loseTotal > 0 {
+		t.Fatalf("get: %d put: %d lose:%d", getTotal, putTotal, loseTotal)
+	} else {
+		t.Logf("get==put: %d", getTotal)
 	}
 }

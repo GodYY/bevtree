@@ -2,18 +2,10 @@
 
 package bevtree
 
-func (p *taskPool) get() Task {
-	return p.p.Get().(Task)
+func (p *pool) get() interface{} {
+	return p.p.Get()
 }
 
-func (p *taskPool) put(task Task) {
-	p.p.Put(task)
-}
-
-func getTaskQueElem() *taskQueElem {
-	return taskElemPool.Get().(*taskQueElem)
-}
-
-func putTaskQueElem(e *taskQueElem) {
-	taskElemPool.Put(e)
+func (p *pool) put(i interface{}) {
+	p.p.Put(i)
 }

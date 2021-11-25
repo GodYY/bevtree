@@ -1,658 +1,343 @@
 package bevtree
 
 import (
-	"log"
 	"math/rand"
-	"reflect"
 
 	"github.com/GodYY/gutils/assert"
 )
 
-type compositeNode = Node
-
-type compositeTask = logicTask
-
-type compositeNodeBase struct {
-	nodeBase
-	self       compositeNode
-	childCount int
-	firstChild Node
-	lastChild  Node
+type CompositeNode interface {
+	Node
+	ChildCount() int
+	Child(idx int) Node
+	AddChild(child Node)
+	RemoveChild(idx int) Node
 }
 
-func newCompositeNode(self compositeNode) compositeNodeBase {
-	if debug {
-		assert.Assert(self != nil, "self nil")
-	}
-
-	return compositeNodeBase{
-		nodeBase: newNode(),
-		self:     self,
-	}
+type compositeNode struct {
+	node
+	childs []Node
 }
 
-func (c *compositeNodeBase) ChildCount() int { return c.childCount }
-
-func (c *compositeNodeBase) FirstChild() Node { return c.firstChild }
-
-func (c *compositeNodeBase) LastChild() Node { return c.lastChild }
-
-func (c *compositeNodeBase) AddChild(child Node) {
-	assert.Assert(child != nil && child.Parent() == nil, "child nil or already has parent")
-
-	if c.lastChild == nil {
-		c.lastChild = child
-		c.firstChild = child
-		child.setParent(c.self)
-		c.childCount++
-	} else {
-		c.AddChildAfter(child, c.lastChild)
-	}
+func newCompositeNode() compositeNode {
+	return compositeNode{}
 }
 
-func (c *compositeNodeBase) AddChildBefore(child, mark Node) {
-	assert.Assert(child != nil && child.Parent() == nil, "child nil or already has parent")
-	assert.Assert(mark != nil && mark.Parent() == c.self, "mark nil or not child of it")
+func (c *compositeNode) ChildCount() int { return len(c.childs) }
 
-	child.setParent(c.self)
-
-	if prev := mark.PrevSibling(); prev != nil {
-		prev.setNextSibling(child)
-		child.setPrevSibling(prev)
-	} else {
-		child.setPrevSibling(nil)
-		c.firstChild = child
+func (c *compositeNode) Child(idx int) Node {
+	if idx < 0 || idx >= c.ChildCount() {
+		return nil
 	}
 
-	child.setNextSibling(mark)
-	mark.setPrevSibling(child)
-
-	c.childCount++
+	return c.childs[idx]
 }
 
-func (c *compositeNodeBase) AddChildAfter(child, mark Node) {
-	assert.Assert(child != nil && child.Parent() == nil, "child nil or already has parent")
-	assert.Assert(mark != nil && mark.Parent() == c.self, "mark nil or not child of it")
+func (c *compositeNode) AddChild(self CompositeNode, child Node) {
+	assert.Assert(self != nil, "self nil")
 
-	child.setParent(c.self)
-
-	if next := mark.NextSibling(); next != nil {
-		next.setPrevSibling(child)
-		child.setNextSibling(next)
-	} else {
-		child.setNextSibling(nil)
-		c.lastChild = child
+	if child == nil {
+		return
 	}
 
-	mark.setNextSibling(child)
-	child.setPrevSibling(mark)
-
-	c.childCount++
+	child.SetParent(self)
+	c.childs = append(c.childs, child)
 }
 
-func (c *compositeNodeBase) MoveChildBefore(child, mark Node) {
-	assert.Assert(child != nil && child.Parent() == c.self, "child nil or not child of it")
-	assert.Assert(mark != nil && mark.Parent() == c.self, "mark nil or not child of it")
-
-	if child.PrevSibling() != nil {
-		child.PrevSibling().setNextSibling(child.NextSibling())
+func (c *compositeNode) RemoveChild(idx int) Node {
+	if idx < 0 || idx >= c.ChildCount() {
+		return nil
 	}
 
-	if child.NextSibling() != nil {
-		child.NextSibling().setPrevSibling(child.PrevSibling())
-	}
-
-	if mark.PrevSibling() != nil {
-		mark.PrevSibling().setNextSibling(child)
-		child.setPrevSibling(mark.PrevSibling())
-	} else {
-		child.setPrevSibling(nil)
-		c.firstChild = child
-	}
-
-	mark.setPrevSibling(child)
-	child.setNextSibling(mark)
-}
-
-func (c *compositeNodeBase) MoveChildAfter(child, mark Node) {
-	assert.Assert(child != nil && child.Parent() == c.self, "child nil or not child of it")
-	assert.Assert(mark != nil && mark.Parent() == c.self, "mark nil or not child of it")
-
-	if child.PrevSibling() != nil {
-		child.PrevSibling().setNextSibling(child.NextSibling())
-	}
-
-	if child.NextSibling() != nil {
-		child.NextSibling().setPrevSibling(child.PrevSibling())
-	}
-
-	if mark.NextSibling() != nil {
-		mark.NextSibling().setPrevSibling(child)
-		child.setNextSibling(mark.NextSibling())
-	} else {
-		child.setNextSibling(nil)
-		c.lastChild = child
-	}
-
-	mark.setNextSibling(child)
-	child.setPrevSibling(mark)
-}
-
-func (c *compositeNodeBase) RemoveChild(child Node) {
-	assert.Assert(child != nil && child.Parent() == c.self, "child nil or not child of it")
-
-	if child.PrevSibling() != nil {
-		child.PrevSibling().setNextSibling(child.NextSibling())
-	} else {
-		c.firstChild = child.NextSibling()
-	}
-
-	if child.NextSibling() != nil {
-		child.NextSibling().setPrevSibling(child.PrevSibling())
-	} else {
-		c.lastChild = child.PrevSibling()
-	}
-
-	child.setNextSibling(nil)
-	child.setPrevSibling(nil)
-	child.setParent(nil)
-	c.childCount--
-}
-
-type compositeTaskBase struct {
-	logicTaskBase
-}
-
-func newCompisteTask(self compositeTask) compositeTaskBase {
-	return compositeTaskBase{
-		logicTaskBase: newLogicTask(self),
-	}
-}
-
-func (t *compositeTaskBase) getNode() compositeNode {
-	return t.node
-}
-
-// -----------------------------------------------------------
-// CustomSequence
-// -----------------------------------------------------------
-
-type customSeqTask struct {
-	compositeTaskBase
-	curChild    Task
-	curNode     Node
-	keepOn      func(Result) bool
-	getNextNode func() Node
-}
-
-func newCustomSeqTask(self compositeTask, keepOn func(Result) bool, getNextNode func() Node) customSeqTask {
-	if debug {
-		assert.Assert(keepOn != nil, "keepOn nil")
-		assert.Assert(getNextNode != nil, "getNextChild nil")
-	}
-
-	return customSeqTask{
-		compositeTaskBase: newCompisteTask(self),
-		keepOn:            keepOn,
-		getNextNode:       getNextNode,
-	}
-}
-
-func (t *customSeqTask) dtr() {
-	if t.curChild != nil {
-		if debug {
-			log.Printf("%s.dtr() curChild not nil", reflect.TypeOf(t.self).Elem().Name())
-		}
-
-		t.curChild.destroy()
-		t.curChild = nil
-	}
-
-	t.curNode = nil
-	t.compositeTaskBase.dtr()
-}
-
-func (t *customSeqTask) onInit(e *Env) bool {
-	t.curNode = t.getNextNode()
-	if t.curNode == nil {
-		return false
-	}
-
-	t.curChild = t.curNode.CreateTask(t.self)
-	e.pushCurrentTask(t.curChild)
-	return true
-}
-
-func (t *customSeqTask) onUpdate(e *Env) Result {
-	return RRunning
-}
-
-func (t *customSeqTask) onTerminate(e *Env) {
-	t.curChild = nil
-	t.curNode = nil
-}
-
-func (t *customSeqTask) onStop(e *Env) {
-	t.curChild.detachParent()
-}
-
-func (t *customSeqTask) onLazyStop(e *Env) {
-	if t.curChild != nil {
-		t.curChild.lazyStop(e)
-	}
-}
-
-func (t *customSeqTask) onChildOver(child Task, r Result, e *Env) Result {
-	assert.Equal(child, t.curChild, "not current child")
-
-	t.curChild = nil
-
-	if t.isLazyStop() {
-		return RRunning
-	}
-
-	if !t.keepOn(r) {
-		return r
-	}
-
-	nextNode := t.getNextNode()
-	if nextNode == nil {
-		return r
-	}
-
-	t.curNode = nextNode
-	t.curChild = nextNode.CreateTask(t.self)
-	e.pushCurrentTask(t.curChild)
-	return RRunning
-}
-
-// -----------------------------------------------------------
-// ChildSequence
-// -----------------------------------------------------------
-
-type childSeqTask struct {
-	customSeqTask
-}
-
-func newChildSeqTask(self compositeTask, keepOn func(Result) bool) *childSeqTask {
-	t := new(childSeqTask)
-	t.customSeqTask = newCustomSeqTask(self, keepOn, t.getNextNode)
-	return t
-}
-
-func (t *childSeqTask) getNextNode() Node {
-	if t.curNode == nil {
-		return t.getNode().FirstChild()
-	} else {
-		return t.curNode.NextSibling()
-	}
-}
-
-// -----------------------------------------------------------
-// Sequence
-// -----------------------------------------------------------
-
-func sequenceKeepOn(r Result) bool {
-	return r == RSuccess
+	child := c.childs[idx]
+	child.SetParent(nil)
+	c.childs = append(c.childs[0:idx], c.childs[idx+1:]...)
+	return child
 }
 
 type SequenceNode struct {
-	compositeNodeBase
+	compositeNode
 }
 
-func NewSequence() *SequenceNode {
-	s := new(SequenceNode)
-	s.compositeNodeBase = newCompositeNode(s)
-	return s
+func NewSequenceNode() *SequenceNode {
+	return &SequenceNode{
+		compositeNode: newCompositeNode(),
+	}
 }
 
-func (s *SequenceNode) NodeType() NodeType { return sequence }
-
-func (s *SequenceNode) CreateTask(parent Task) Task {
-	return sequenceTaskPool.get().(*sequenceTask).ctr(s, parent)
-}
-
-func (s *SequenceNode) DestroyTask(t Task) {
-	t.(*sequenceTask).dtr()
-	sequenceTaskPool.put(t)
-}
-
-var sequenceTaskPool = newTaskPool(func() Task { return newSequenceTask() })
+func (s *SequenceNode) NodeType() NodeType  { return sequence }
+func (s *SequenceNode) AddChild(child Node) { s.compositeNode.AddChild(s, child) }
 
 type sequenceTask struct {
-	*childSeqTask
+	node        *SequenceNode
+	curChildIdx int
 }
 
-func newSequenceTask() *sequenceTask {
-	t := new(sequenceTask)
-	t.childSeqTask = newChildSeqTask(t, sequenceKeepOn)
-	return t
+func (s *sequenceTask) TaskType() TaskType { return TaskSerial }
+
+func (s *sequenceTask) OnCreate(node Node) {
+	s.node = node.(*SequenceNode)
+	s.curChildIdx = 0
 }
 
-func (t *sequenceTask) ctr(node *SequenceNode, parent Task) Task {
-	return t.childSeqTask.ctr(node, parent)
-}
+func (s *sequenceTask) OnDestroy() { s.node = nil }
 
-// -----------------------------------------------------------
-// Selector
-// -----------------------------------------------------------
-
-func selectorKeepOn(r Result) bool {
-	return r == RFailure
-}
-
-type SelectorNode struct {
-	compositeNodeBase
-}
-
-func NewSelector() *SelectorNode {
-	s := new(SelectorNode)
-	s.compositeNodeBase = newCompositeNode(s)
-	return s
-}
-
-func (s *SelectorNode) NodeType() NodeType { return selector }
-
-func (s *SelectorNode) CreateTask(parent Task) Task {
-	return selectorTaskPool.get().(*selectorTask).ctr(s, parent)
-}
-
-func (s *SelectorNode) DestroyTask(t Task) {
-	t.(*selectorTask).dtr()
-	selectorTaskPool.put(t)
-}
-
-var selectorTaskPool = newTaskPool(func() Task { return newSelectorTask() })
-
-type selectorTask struct {
-	*childSeqTask
-}
-
-func newSelectorTask() *selectorTask {
-	t := new(selectorTask)
-	t.childSeqTask = newChildSeqTask(t, selectorKeepOn)
-	return t
-}
-
-func (t *selectorTask) ctr(node *SelectorNode, parent Task) Task {
-	return t.childSeqTask.ctr(node, parent)
-}
-
-// -----------------------------------------------------------
-// Random Child Sequence
-// -----------------------------------------------------------
-
-type randChildSeqTask struct {
-	customSeqTask
-	nodes   []Node
-	curNode int
-}
-
-func newRandChildSeqTask(self compositeTask, keepOn func(Result) bool) *randChildSeqTask {
-	t := new(randChildSeqTask)
-	t.customSeqTask = newCustomSeqTask(self, keepOn, t.getNextNode)
-	return t
-}
-
-func (t *randChildSeqTask) dtr() {
-	t.nodes = nil
-	t.curNode = -1
-	t.customSeqTask.dtr()
-}
-
-func (t *randChildSeqTask) onInit(e *Env) bool {
-	compNode := t.getNode()
-	if compNode.ChildCount() == 0 {
+func (s *sequenceTask) OnInit(nextList *NodeList, ctx *Context) bool {
+	if s.node.ChildCount() == 0 {
 		return false
 	}
 
-	t.nodes = make([]Node, compNode.ChildCount())
-	n := 0
-	for node := compNode.FirstChild(); node != nil; node = node.NextSibling() {
-		t.nodes[n] = node
-		n++
-	}
-
-	for ; n > 1; n-- {
-		k := rand.Intn(n)
-		if k != n-1 {
-			tmp := t.nodes[n-1]
-			t.nodes[n-1] = t.nodes[k]
-			t.nodes[k] = tmp
-		}
-	}
-
-	t.curNode = -1
-
-	return t.customSeqTask.onInit(e)
-}
-
-func (t *randChildSeqTask) onUpdate(e *Env) Result {
-	return t.customSeqTask.onUpdate(e)
-}
-
-func (t *randChildSeqTask) onTerminate(e *Env) {
-	t.customSeqTask.onTerminate(e)
-	t.nodes = nil
-	t.curNode = -1
-}
-
-func (t *randChildSeqTask) getNextNode() Node {
-	t.curNode++
-	if t.curNode == len(t.nodes) {
-		t.curNode = -1
-		t.customSeqTask.curNode = nil
-		return nil
-	} else {
-		t.customSeqTask.curNode = t.nodes[t.curNode]
-		return t.nodes[t.curNode]
-	}
-}
-
-// -----------------------------------------------------------
-// RandomSequence
-// -----------------------------------------------------------
-
-type RandSequenceNode struct {
-	compositeNodeBase
-}
-
-func NewRandSequence() *RandSequenceNode {
-	s := new(RandSequenceNode)
-	s.compositeNodeBase = newCompositeNode(s)
-	return s
-}
-
-func (s *RandSequenceNode) NodeType() NodeType { return randSequence }
-
-func (s *RandSequenceNode) CreateTask(parent Task) Task {
-	return randSeqTaskPool.get().(*randSequenceTask).ctr(s, parent)
-}
-
-func (s *RandSequenceNode) DestroyTask(t Task) {
-	t.(*randSequenceTask).dtr()
-	randSeqTaskPool.put(t)
-}
-
-var randSeqTaskPool = newTaskPool(func() Task { return newRandSequenceTask() })
-
-type randSequenceTask struct {
-	*randChildSeqTask
-}
-
-func newRandSequenceTask() *randSequenceTask {
-	s := new(randSequenceTask)
-	s.randChildSeqTask = newRandChildSeqTask(s, sequenceKeepOn)
-	return s
-}
-
-func (t *randSequenceTask) ctr(node *RandSequenceNode, parent Task) Task {
-	return t.randChildSeqTask.ctr(node, parent)
-}
-
-// -----------------------------------------------------------
-// RandomSelector
-// -----------------------------------------------------------
-
-type RandSelectorNode struct {
-	compositeNodeBase
-}
-
-func NewRandSelector() *RandSelectorNode {
-	s := new(RandSelectorNode)
-	s.compositeNodeBase = newCompositeNode(s)
-	return s
-}
-
-func (s *RandSelectorNode) NodeType() NodeType { return randSelector }
-
-func (s *RandSelectorNode) CreateTask(parent Task) Task {
-	return randSelcTaskPool.get().(*randSelectorTask).ctr(s, parent)
-}
-
-func (s *RandSelectorNode) DestroyTask(t Task) {
-	t.(*randSelectorTask).dtr()
-	randSelcTaskPool.put(t)
-}
-
-var randSelcTaskPool = newTaskPool(func() Task { return newRandSelectorTask() })
-
-type randSelectorTask struct {
-	*randChildSeqTask
-}
-
-func newRandSelectorTask() *randSelectorTask {
-	s := new(randSelectorTask)
-	s.randChildSeqTask = newRandChildSeqTask(s, selectorKeepOn)
-	return s
-}
-
-func (t *randSelectorTask) ctr(node *RandSelectorNode, parent Task) Task {
-	return t.randChildSeqTask.ctr(node, parent)
-}
-
-// -----------------------------------------------------------
-// Parallel
-// -----------------------------------------------------------
-
-type ParallelNode struct {
-	compositeNodeBase
-}
-
-func NewParallel() *ParallelNode {
-	p := new(ParallelNode)
-	p.compositeNodeBase = newCompositeNode(p)
-	return p
-}
-
-func (p *ParallelNode) NodeType() NodeType { return parallel }
-
-func (p *ParallelNode) CreateTask(parent Task) Task {
-	return paralTaskPool.get().(*parallelTask).ctr(p, parent)
-}
-
-func (p *ParallelNode) DestroyTask(t Task) {
-	t.(*parallelTask).dtr()
-	paralTaskPool.put(t)
-}
-
-var paralTaskPool = newTaskPool(func() Task { return newParellelTask() })
-
-type parallelTask struct {
-	compositeTaskBase
-	childs    []Task
-	completed int
-}
-
-func newParellelTask() *parallelTask {
-	t := new(parallelTask)
-	t.compositeTaskBase = newCompisteTask(t)
-	return t
-}
-
-func (t *parallelTask) ctr(node *ParallelNode, parent Task) Task {
-	return t.compositeTaskBase.ctr(node, parent)
-}
-
-func (t *parallelTask) dtr() {
-	for i, v := range t.childs {
-		if v != nil {
-			if debug {
-				log.Printf("parallelTask.dtr() No.%d child not nil", i)
-			}
-
-			v.destroy()
-		}
-	}
-	t.childs = nil
-
-	t.completed = 0
-
-	t.compositeTaskBase.dtr()
-}
-
-func (t *parallelTask) onInit(e *Env) bool {
-	node := t.getNode()
-	if node.ChildCount() == 0 {
-		return false
-	}
-
-	t.childs = make([]Task, node.ChildCount())
-	for i, node := 0, node.FirstChild(); node != nil; i, node = i+1, node.NextSibling() {
-		t.childs[i] = node.CreateTask(t)
-		e.pushCurrentTask(t.childs[i])
-	}
-
+	nextList.Push(s.node.Child(0))
 	return true
 }
 
-func (t *parallelTask) onUpdate(e *Env) Result {
-	return RRunning
-}
+func (s *sequenceTask) OnUpdate(ctx *Context) Result { return RRunning }
+func (s *sequenceTask) OnTerminate(ctx *Context)     {}
 
-func (t *parallelTask) onTerminate(e *Env) {
-	t.childs = nil
-	t.completed = 0
-}
-
-func (t *parallelTask) onStop(e *Env) {
-	for _, v := range t.childs {
-		if v != nil {
-			v.detachParent()
-		}
-	}
-}
-
-func (t *parallelTask) onLazyStop(e *Env) {
-	for _, v := range t.childs {
-		if v != nil {
-			v.lazyStop(e)
-		}
-	}
-}
-
-func (t *parallelTask) onChildOver(child Task, r Result, e *Env) Result {
-	for i, v := range t.childs {
-		if v == nil {
-			continue
-		}
-
-		if r == RSuccess && child == v {
-			t.childs[i] = nil
-			break
-		} else if r == RFailure && child != v {
-			v.lazyStop(e)
-		}
-	}
-
-	if t.isLazyStop() {
+func (s *sequenceTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
+	s.curChildIdx++
+	if result == RSuccess && s.curChildIdx < s.node.ChildCount() {
+		nextNodes.Push(s.node.Child(s.curChildIdx))
 		return RRunning
+	} else {
+		return result
+	}
+}
+
+type SelectorNode struct {
+	compositeNode
+}
+
+func NewSelectorNode() *SelectorNode {
+	return &SelectorNode{
+		compositeNode: newCompositeNode(),
+	}
+}
+
+func (s *SelectorNode) NodeType() NodeType  { return selector }
+func (s *SelectorNode) AddChild(child Node) { s.compositeNode.AddChild(s, child) }
+
+type selectorTask struct {
+	node        *SelectorNode
+	curChildIdx int
+}
+
+func (s *selectorTask) TaskType() TaskType { return TaskSerial }
+
+func (s *selectorTask) OnCreate(node Node) {
+	s.node = node.(*SelectorNode)
+	s.curChildIdx = 0
+}
+
+func (s *selectorTask) OnDestroy() { s.node = nil }
+
+func (s *selectorTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
+	if s.node.ChildCount() == 0 {
+		return false
+	} else {
+		nextNodes.Push(s.node.Child(0))
+		return true
+	}
+}
+
+func (s *selectorTask) OnUpdate(ctx *Context) Result { return RRunning }
+func (s *selectorTask) OnTerminate(ctx *Context)     {}
+
+func (s *selectorTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
+	s.curChildIdx++
+	if result == RFailure && s.curChildIdx < s.node.ChildCount() {
+		nextNodes.Push(s.node.Child(s.curChildIdx))
+		return RRunning
+	} else {
+		return result
+	}
+}
+
+func genRandChildNodes(node CompositeNode) []Node {
+	childCount := node.ChildCount()
+	if childCount == 0 {
+		return nil
 	}
 
-	t.completed++
-	if r == RSuccess && t.completed < len(t.childs) {
-		r = RRunning
+	childs := make([]Node, childCount)
+	for i := childCount - 1; i > 0; i-- {
+		if childs[i] == nil {
+			childs[i] = node.Child(i)
+		}
+
+		k := rand.Intn(i + 1)
+		if k != i {
+			if childs[k] == nil {
+				childs[k] = node.Child(k)
+			}
+
+			childs[k], childs[i] = childs[i], childs[k]
+		}
 	}
 
-	return r
+	if childs[0] == nil {
+		childs[0] = node.Child(0)
+	}
+
+	return childs
+}
+
+type RandSequenceNode struct {
+	compositeNode
+}
+
+func NewRandSequenceNode() *RandSequenceNode {
+	return &RandSequenceNode{
+		compositeNode: newCompositeNode(),
+	}
+}
+
+func (s *RandSequenceNode) NodeType() NodeType  { return randSequence }
+func (s *RandSequenceNode) AddChild(child Node) { s.compositeNode.AddChild(s, child) }
+
+type randSequenceTask struct {
+	node        *RandSequenceNode
+	childs      []Node
+	curChildIdx int
+}
+
+func (s *randSequenceTask) TaskType() TaskType { return TaskSerial }
+
+func (s *randSequenceTask) OnCreate(node Node) {
+	s.node = node.(*RandSequenceNode)
+	s.curChildIdx = 0
+}
+
+func (s *randSequenceTask) OnDestroy() {
+	s.node = nil
+	s.childs = nil
+}
+
+func (s *randSequenceTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
+	if s.childs = genRandChildNodes(s.node); len(s.childs) == 0 {
+		return false
+	} else {
+		nextNodes.Push(s.childs[s.curChildIdx])
+		return true
+	}
+}
+
+func (s *randSequenceTask) OnUpdate(ctx *Context) Result { return RRunning }
+func (s *randSequenceTask) OnTerminate(ctx *Context)     {}
+
+func (s *randSequenceTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
+	s.curChildIdx++
+
+	if result == RSuccess && s.curChildIdx < s.node.ChildCount() {
+		nextNodes.Push(s.childs[s.curChildIdx])
+		return RRunning
+	} else {
+		return result
+	}
+}
+
+type RandSelectorNode struct {
+	compositeNode
+}
+
+func NewRandSelectorNode() *RandSelectorNode {
+	return &RandSelectorNode{
+		compositeNode: newCompositeNode(),
+	}
+}
+
+func (s *RandSelectorNode) NodeType() NodeType  { return randSelector }
+func (s *RandSelectorNode) AddChild(child Node) { s.compositeNode.AddChild(s, child) }
+
+type randSelectorTask struct {
+	node        *RandSelectorNode
+	childs      []Node
+	curChildIdx int
+}
+
+func (s *randSelectorTask) TaskType() TaskType { return TaskSerial }
+
+func (s *randSelectorTask) OnCreate(node Node) {
+	s.node = node.(*RandSelectorNode)
+	s.curChildIdx = 0
+}
+
+func (s *randSelectorTask) OnDestroy() {
+	s.node = nil
+	s.childs = nil
+}
+
+func (s *randSelectorTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
+	s.childs = genRandChildNodes(s.node)
+	if len(s.childs) == 0 {
+		return false
+	} else {
+		nextNodes.Push(s.childs[s.curChildIdx])
+		return true
+	}
+}
+
+func (s *randSelectorTask) OnUpdate(ctx *Context) Result { return RRunning }
+func (s *randSelectorTask) OnTerminate(ctx *Context)     {}
+
+func (s *randSelectorTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
+	s.curChildIdx++
+
+	if result == RFailure && s.curChildIdx < s.node.ChildCount() {
+		nextNodes.Push(s.childs[s.curChildIdx])
+		return RRunning
+	} else {
+		return result
+	}
+}
+
+type ParallelNode struct {
+	compositeNode
+}
+
+func NewParallelNode() *ParallelNode {
+	return &ParallelNode{
+		compositeNode: newCompositeNode(),
+	}
+}
+
+func (p *ParallelNode) NodeType() NodeType  { return parallel }
+func (p *ParallelNode) AddChild(child Node) { p.compositeNode.AddChild(p, child) }
+
+type parallelTask struct {
+	node      *ParallelNode
+	completed int
+}
+
+func (p *parallelTask) TaskType() TaskType { return TaskParallel }
+
+func (p *parallelTask) OnCreate(node Node) {
+	p.node = node.(*ParallelNode)
+	p.completed = 0
+}
+
+func (p *parallelTask) OnDestroy() { p.node = nil }
+
+func (p *parallelTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
+	childCount := p.node.ChildCount()
+	if childCount == 0 {
+		return false
+	} else {
+		for i := 0; i < childCount; i++ {
+			nextNodes.Push(p.node.Child(i))
+		}
+		return true
+	}
+}
+
+func (p *parallelTask) OnUpdate(ctx *Context) Result { return RRunning }
+func (p *parallelTask) OnTerminate(ctx *Context)     { p.completed = 0 }
+func (p *parallelTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
+	p.completed++
+
+	if result == RSuccess && p.completed < p.node.ChildCount() {
+		return RRunning
+	} else {
+		return result
+	}
 }

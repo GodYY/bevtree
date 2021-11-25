@@ -20,14 +20,22 @@ func newBevBBIncr(key string, limited int) *bevBBIncr {
 	}
 }
 
-func (b *bevBBIncr) OnInit(_ *Env) {
+var btBBIncr = RegisterBevType("blackboardIncr", func() Bev {
+	return &bevBBIncr{}
+})
+
+func (b *bevBBIncr) BevType() BevType { return btBBIncr }
+func (b *bevBBIncr) OnCreate(template Bev) {
+	tmpl := template.(*bevBBIncr)
+	b.key = tmpl.key
+	b.limited = tmpl.limited
+	b.count = 0
 }
+func (b *bevBBIncr) OnDestroy()             {}
+func (b *bevBBIncr) OnInit(_ *Context) bool { return true }
 
-func (b *bevBBIncr) OnUpdate(e *Env) Result {
-	val := e.Val(b.key).(int)
-	val++
-	e.Set(b.key, val)
-
+func (b *bevBBIncr) OnUpdate(e *Context) Result {
+	e.IncInt(b.key)
 	b.count++
 
 	if b.count >= b.limited {
@@ -38,125 +46,99 @@ func (b *bevBBIncr) OnUpdate(e *Env) Result {
 
 }
 
-func (b *bevBBIncr) OnTerminate(_ *Env) {
+func (b *bevBBIncr) OnTerminate(_ *Context) {}
+
+func (b *bevBBIncr) Clone() Bev {
+	copy := *b
+	return &copy
 }
 
-type bevBBIncrDef struct {
-	key     string
-	limited int
-}
+func (b *bevBBIncr) Destroy() {}
 
-func newBevBBIncrDef(key string, limited int) *bevBBIncrDef {
-	return &bevBBIncrDef{key: key, limited: limited}
-}
-
-func (bd *bevBBIncrDef) CreateBev() BevInst {
-	return newBevBBIncr(bd.key, bd.limited)
-}
-
-func (bd *bevBBIncrDef) DestroyBev(_ BevInst) {
-}
-
-var xmlNameKey = createXMLName("key")
-
-func (bd *bevBBIncrDef) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
+func (b *bevBBIncr) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 	var err error
 
-	if err = e.EncodeElement(bd.key, xml.StartElement{Name: xmlNameKey}); err != nil {
+	if err = e.EncodeElement(b.key, xml.StartElement{Name: createXMLName("key")}); err != nil {
 		return err
 	}
 
-	return e.EncodeElement(bd.limited, xml.StartElement{Name: xmlNameLimited})
+	return e.EncodeElement(b.limited, xml.StartElement{Name: createXMLName("limited")})
 }
 
-func (bd *bevBBIncrDef) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
+func (b *bevBBIncr) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 	return d.DecodeEndTo(start.End(), func(d *XMLDecoder, start xml.StartElement) error {
-		if start.Name == xmlNameKey {
-			return d.DecodeElement(&bd.key, start)
+		if start.Name == createXMLName("key") {
+			return d.DecodeElement(&b.key, start)
 		}
 
-		if start.Name == xmlNameLimited {
-			return d.DecodeElement(&bd.limited, start)
+		if start.Name == createXMLName("limited") {
+			return d.DecodeElement(&b.limited, start)
 		}
 
 		return nil
 	})
 }
 
-type bevCoder struct {
-}
-
-func (c *bevCoder) EncodeXMLBev(e *XMLEncoder, bd Bev, start xml.StartElement) error {
-	return e.EncodeStartEnd(bd, start)
-}
-
-func (c *bevCoder) DecodeXMLBev(d *XMLDecoder, pbd *Bev, start xml.StartElement) error {
-	bd := &bevBBIncrDef{}
-	if err := d.DecodeElement(bd, start); err != nil {
-		return err
-	}
-
-	*pbd = bd
-	return nil
-}
+var xmlNameKey = createXMLName("key")
 
 func TestBevTreeMarshalXML(t *testing.T) {
 	key := "key"
 	sum := 0
-	low := 5
-	max := 10
+
 	unit := 1
 
 	rand.Seed(time.Now().UnixNano())
 
 	tree := NewBevTree()
-	paral := NewParallel()
+	paral := NewParallelNode()
 	tree.Root().SetChild(paral)
 
-	bd := newBevBBIncrDef(key, unit)
+	bd := newBevBBIncr(key, unit)
 
-	sc := NewSucceeder()
-	sc.SetChild(NewBev(bd))
+	sc := NewSucceederNode()
+	sc.SetChild(NewBevNode(bd))
 	paral.AddChild(sc)
 	sum += unit
 
+	low := 5
+	max := 10
 	rtimes := low + rand.Intn(max-low+1)
-	r := NewRepeater(rtimes)
-	r.AddChild(NewBev(bd))
+	r := NewRepeaterNode(rtimes)
+	r.SetChild(NewBevNode(bd))
 	paral.AddChild(r)
 	sum += rtimes * unit
 
-	iv_sc := NewSucceeder()
-	iv := NewInverter()
-	iv.SetChild(NewBev(bd))
+	iv_sc := NewSucceederNode()
+	iv := NewInverterNode()
+	iv.SetChild(NewBevNode(bd))
 	iv_sc.SetChild(iv)
 	paral.AddChild(iv_sc)
 	sum += unit
 
-	ruf := NewRepeatUntilFail(true)
-	ruf_iv := NewInverter()
+	ruf := NewRepeatUntilFailNode(true)
+	ruf_iv := NewInverterNode()
 	ruf.SetChild(ruf_iv)
-	ruf_iv.SetChild(NewBev(bd))
+	ruf_iv.SetChild(NewBevNode(bd))
 	paral.AddChild(ruf)
 	sum += unit
 
 	seqTimes := low + rand.Intn(max-low+1)
-	seq := NewSequence()
+	seq := NewSequenceNode()
 	for i := 0; i < seqTimes; i++ {
-		seq.AddChild(NewBev(bd))
+		seq.AddChild(NewBevNode(bd))
 	}
 	paral.AddChild(seq)
 	sum += seqTimes * unit
 
 	selcTimes := low + rand.Intn(max-low+1)
-	selc := NewSelector()
+	selc := NewSelectorNode()
 	selcSuccN := rand.Intn(selcTimes)
 	for i := 0; i < selcTimes; i++ {
 		if selcSuccN == i {
-			selc.AddChild(NewBev(bd))
+			selc.AddChild(NewBevNode(bd))
 		} else {
-			iv := NewInverter()
-			iv.AddChild(NewBev(bd))
+			iv := NewInverterNode()
+			iv.SetChild(NewBevNode(bd))
 			selc.AddChild(iv)
 		}
 	}
@@ -167,14 +149,15 @@ func TestBevTreeMarshalXML(t *testing.T) {
 	// paral.AddChild(NewRandSelector())
 	// paral.AddChild(NewParallel())
 
-	env := NewEnv(nil)
-	env.Set(key, 0)
-	tree.Update(env)
-	if env.Val(key).(int) != sum {
-		t.Fatalf("test BevTree before marshal: sum(%d) != %d", env.Val(key).(int), sum)
+	ctx := NewContext(nil)
+	ctx.Set(key, 0)
+	tree.Update(ctx)
+	v, _ := ctx.GetInt(key)
+	if v != sum {
+		t.Fatalf("test BevTree before marshal: sum(%d) != %d", v, sum)
 	}
 
-	data, err := MarshalXMLBevTree(tree, &bevCoder{})
+	data, err := MarshalXMLBevTree(tree)
 	if err != nil {
 		t.Fatal("marshal BevTree:", err)
 	} else {
@@ -182,15 +165,16 @@ func TestBevTreeMarshalXML(t *testing.T) {
 	}
 
 	newTree := new(BevTree)
-	if err := UnmarshalXMLBevTree(data, newTree, &bevCoder{}); err != nil {
+	if err := UnmarshalXMLBevTree(data, newTree); err != nil {
 		t.Fatal("unmarshal previos BevTree:", err)
 	}
 
-	env.Set(key, 0)
-	newTree.Update(env)
+	ctx.Set(key, 0)
+	newTree.Update(ctx)
 
-	if env.Val(key).(int) != sum {
-		t.Fatalf("test BevTree after unmarshal: sum(%d) != %d", env.Val(key).(int), sum)
+	v, _ = ctx.GetInt(key)
+	if v != sum {
+		t.Fatalf("test BevTree after unmarshal: sum(%d) != %d", v, sum)
 	}
 
 }

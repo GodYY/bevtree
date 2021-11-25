@@ -1,6 +1,7 @@
 package bevtree
 
 import (
+	"fmt"
 	"log"
 	"reflect"
 
@@ -10,7 +11,7 @@ import (
 type NodeType int8
 
 // Node metadata.
-type NodeMETA struct {
+type nodeMETA struct {
 	// node name.
 	name string
 
@@ -19,27 +20,46 @@ type NodeMETA struct {
 
 	// function of creating node.
 	creator func() Node
+
+	// task pool.
+	taskPool *pool
 }
 
-var nodeName2META = map[string]*NodeMETA{}
-var nodeType2META = map[NodeType]*NodeMETA{}
+func (meta *nodeMETA) createNode() Node { return meta.creator() }
+
+func (meta *nodeMETA) createTask(node Node) Task {
+	assert.Assert(node != nil, "node nil")
+	task := meta.taskPool.get().(Task)
+	task.OnCreate(node)
+	return task
+}
+
+func (meta *nodeMETA) destroyTask(task Task) {
+	task.OnDestroy()
+	meta.taskPool.put(task)
+}
+
+var nodeName2META = map[string]*nodeMETA{}
+var nodeType2META = map[NodeType]*nodeMETA{}
+
+func getNodeMETAByType(t NodeType) *nodeMETA { return nodeType2META[t] }
 
 func (t NodeType) String() string {
-	meta := nodeType2META[t]
-	assert.AssertF(meta != nil, "node type %d meta not found", t)
-	return meta.name
+	return getNodeMETAByType(t).name
 }
 
 // Register one node type.
-func RegisterNodeType(name string, creator func() Node) NodeType {
+func RegisterNodeType(name string, nodeCreator func() Node, taskCreator func() Task) NodeType {
 	assert.NotEqual(name, "", "empty node type name")
-	assert.AssertF(creator != nil, "node type \"%s\" creator nil", name)
+	assert.AssertF(nodeCreator != nil, "node type \"%s\" nodeCreator nil", name)
+	assert.AssertF(taskCreator != nil, "node type \"%s\" taskCreator nil", name)
 	assert.AssertF(nodeName2META[name] == nil, "node type \"%s\" registered", name)
 
-	meta := &NodeMETA{
-		name:    name,
-		typ:     NodeType(len(nodeName2META)),
-		creator: creator,
+	meta := &nodeMETA{
+		name:     name,
+		typ:      NodeType(len(nodeName2META)),
+		creator:  nodeCreator,
+		taskPool: newPool(func() interface{} { return taskCreator() }),
 	}
 
 	nodeName2META[name] = meta
@@ -48,47 +68,53 @@ func RegisterNodeType(name string, creator func() Node) NodeType {
 	return meta.typ
 }
 
-func createNode(nt NodeType) Node {
-	meta := nodeType2META[nt]
-	assert.AssertF(meta != nil, "node type %d meta not found", nt)
-	return meta.creator()
+var (
+	root            = RegisterNodeType("root", func() Node { return newRootNode() }, func() Task { return &rootTask{} })
+	inverter        = RegisterNodeType("inverter", func() Node { return NewInverterNode() }, func() Task { return &inverterTask{} })
+	succeeder       = RegisterNodeType("succeeder", func() Node { return NewSucceederNode() }, func() Task { return &succeederTask{} })
+	repeater        = RegisterNodeType("repeater", func() Node { return newRepeaterNode() }, func() Task { return &repeaterTask{} })
+	repeatUntilFail = RegisterNodeType("repeatuntilfail", func() Node { return NewRepeatUntilFailNode(true) }, func() Task { return &repeatUntilFailTask{} })
+	sequence        = RegisterNodeType("sequence", func() Node { return NewSequenceNode() }, func() Task { return &sequenceTask{} })
+	selector        = RegisterNodeType("selector", func() Node { return NewSelectorNode() }, func() Task { return &selectorTask{} })
+	randSequence    = RegisterNodeType("randsequence", func() Node { return NewRandSequenceNode() }, func() Task { return &randSequenceTask{} })
+	randSelector    = RegisterNodeType("randselector", func() Node { return NewRandSelectorNode() }, func() Task { return &randSelectorTask{} })
+	parallel        = RegisterNodeType("parallel", func() Node { return NewParallelNode() }, func() Task { return &parallelTask{} })
+	behavior        = RegisterNodeType("behavior", func() Node { return newBevNode() }, func() Task { return &bevTask{} })
+)
+
+func checkNodeTypes() {
+	for _, v := range nodeType2META {
+		node := v.createNode()
+
+		assert.AssertF(node != nil, "node type \"%s\" create nil node", v.name)
+		assert.EqualF(node.NodeType(), v.typ, "node created of type \"%s\" has different type \"%s\"", v.name, node.NodeType().String())
+
+		destroyAgent(createAgent(node))
+	}
 }
 
-var (
-	root            = RegisterNodeType("root", func() Node { return newRoot() })
-	inverter        = RegisterNodeType("inverter", func() Node { return NewInverter() })
-	succeeder       = RegisterNodeType("succeeder", func() Node { return NewSucceeder() })
-	repeater        = RegisterNodeType("repeater", func() Node { return newRepeater(0) })
-	repeatUntilFail = RegisterNodeType("repeatuntilfail", func() Node { return NewRepeatUntilFail(true) })
-	sequence        = RegisterNodeType("sequence", func() Node { return NewRandSequence() })
-	selector        = RegisterNodeType("selector", func() Node { return NewSelector() })
-	randSequence    = RegisterNodeType("randsequence", func() Node { return NewRandSequence() })
-	randSelector    = RegisterNodeType("randselector", func() Node { return NewRandSelector() })
-	parallel        = RegisterNodeType("parallel", func() Node { return NewParallel() })
-	behavior        = RegisterNodeType("behavior", func() Node { return newBev() })
-)
+func init() {
+	checkNodeTypes()
+}
 
 type Node interface {
 	NodeType() NodeType
 	Parent() Node
-	setParent(Node)
-	ChildCount() int
-	FirstChild() Node
-	LastChild() Node
-	AddChild(Node)
-	AddChildBefore(child, before Node)
-	AddChildAfter(child, after Node)
-	RemoveChild(Node)
-	MoveChildBefore(child, mark Node)
-	MoveChildAfter(child, mark Node)
-	PrevSibling() Node
-	setPrevSibling(Node)
-	NextSibling() Node
-	setNextSibling(Node)
+	SetParent(Node)
+}
 
-	// workflow
-	CreateTask(parent Task) Task
-	DestroyTask(Task)
+type node struct {
+	parent Node
+}
+
+func newNode() node {
+	return node{}
+}
+
+func (n *node) Parent() Node { return n.parent }
+
+func (n *node) SetParent(parent Node) {
+	n.parent = parent
 }
 
 type status int8
@@ -121,8 +147,8 @@ const (
 
 var lazyStopStrings = [...]string{
 	lzsNone:         "none",
-	lzsBeforeUpdate: "before-update",
-	lzsAfterUpdate:  "after-update",
+	lzsBeforeUpdate: "before-Update",
+	lzsAfterUpdate:  "after-Update",
 }
 
 func (l lazyStop) String() string { return lazyStopStrings[l] }
@@ -143,552 +169,449 @@ var resultStrings = [...]string{
 
 func (r Result) String() string { return resultStrings[r] }
 
+type TaskType int8
+
+const (
+	TaskSingle = TaskType(iota)
+	TaskSerial
+	TaskParallel
+)
+
+var taskTypeStrings = [...]string{
+	TaskSingle:   "single",
+	TaskSerial:   "serial",
+	TaskParallel: "parallel",
+}
+
+func (tt TaskType) String() string { return taskTypeStrings[tt] }
+
 type Task interface {
-	isBehavior() bool
-	getParent() Task
-	detachParent()
-	getStatus() status
-	setQueElem(*taskQueElem)
-	getQueElem() *taskQueElem
-	isInQue() bool
-	update(*Env) Result
-	stop(*Env)
-	lazyStop(*Env)
-	childOver(Task, Result, *Env) Result
-	destroy()
+	TaskType() TaskType
+	OnCreate(node Node)
+	OnDestroy()
+	OnInit(nextNodes *NodeList, ctx *Context) bool
+	OnUpdate(ctx *Context) Result
+	OnTerminate(ctx *Context)
+	OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result
 }
 
-type nodeBase struct {
-	parent                   Node
-	prevSibling, nextSibling Node
-}
-
-func newNode() nodeBase {
-	return nodeBase{}
-}
-
-func (n *nodeBase) Parent() Node { return n.parent }
-
-func (n *nodeBase) setParent(parent Node) {
-	n.parent = parent
-}
-
-func (n *nodeBase) PrevSibling() Node { return n.prevSibling }
-
-func (n *nodeBase) setPrevSibling(node Node) { n.prevSibling = node }
-
-func (n *nodeBase) NextSibling() Node { return n.nextSibling }
-
-func (n *nodeBase) setNextSibling(node Node) { n.nextSibling = node }
-
-type taskBase struct {
+type agent struct {
 	node             Node
-	parent           Task
+	task             Task
+	parent           *agent
+	firstChild       *agent
+	prev, next       *agent
 	latestUpdateSeri uint32
 	st               status
 	lzStop           lazyStop
-	qElem            *taskQueElem
+	elem             *element
 }
 
-// func newTask(node node, parent task) taskBase {
-// 	if debug {
-// 		assertNilArg(node, "node")
-// 	}
+func (a *agent) onCreate(node Node, task Task) {
+	a.node = node
+	a.task = task
+	a.latestUpdateSeri = 0
+	a.st = sNone
+	a.lzStop = lzsNone
+}
 
-// 	return taskBase{node: node, parent: parent}
-// }
+func (a *agent) onDestroy() {
+	a.node = nil
+	a.task = nil
+}
 
-func (t *taskBase) ctr(node Node, parent Task) {
-	if debug {
-		assert.Assert(node != nil, "node nil")
+func (a *agent) isPersistent() bool { return a.task.TaskType() == TaskSingle }
+
+func (a *agent) getNext() *agent {
+	if a.parent != nil && a.next != a.parent.firstChild {
+		return a.next
 	}
-
-	t.node = node
-	t.parent = parent
-	t.latestUpdateSeri = 0
-	t.setStatus(sNone)
-	t.setLZStop(lzsNone)
-	t.qElem = nil
+	return nil
 }
 
-func (t *taskBase) dtr() {
-	t.node = nil
-	t.parent = nil
-	t.qElem = nil
-}
-
-func (t *taskBase) getParent() Task {
-	return t.parent
-}
-
-func (t *taskBase) detachParent() {
-	t.parent = nil
-}
-
-func (t *taskBase) setStatus(st status) {
-	t.st = st
-}
-
-func (t *taskBase) getStatus() status {
-	return t.st
-}
-
-func (t *taskBase) setLZStop(lzStop lazyStop) {
-	t.lzStop = lzStop
-}
-
-func (t *taskBase) getLZStop() lazyStop {
-	return t.lzStop
-}
-
-func (t *taskBase) isLazyStop() bool {
-	return t.lzStop != lzsNone
-}
-
-func (t *taskBase) setQueElem(e *taskQueElem) {
-	t.qElem = e
-}
-
-func (t *taskBase) getQueElem() *taskQueElem {
-	return t.qElem
-}
-
-func (t *taskBase) isInQue() bool { return t.qElem != nil }
-
-func (t *taskBase) lazyStop(self Task, e *Env) {
-	st := t.getStatus()
-	log.Printf("%s.lazyStop %v", reflect.TypeOf(self).Elem().Name(), st)
-	if st == sStopped || st == sTerminated || t.isLazyStop() {
-		return
+func (a *agent) getPrev() *agent {
+	if a.parent != nil && a.prev != a.parent.firstChild {
+		return a.prev
 	}
+	return nil
+}
 
-	if t.latestUpdateSeri != e.getUpdateSeri() {
-		t.setLZStop(lzsAfterUpdate)
+func (a *agent) addChild(child *agent) {
+	assert.Assert(child != nil && child.parent == nil, "child nil or has parent")
+
+	if a.firstChild == nil {
+		child.prev = child
+		child.next = child
+		a.firstChild = child
 	} else {
-		t.setLZStop(lzsBeforeUpdate)
+		child.prev = a.firstChild.prev
+		child.next = a.firstChild
+		child.prev.next = child
+		child.next.prev = child
 	}
 
-	// assert.Nilf(t.qElem, "%s.qElem nil", reflect.TypeOf(self).Elem().Name())
+	child.parent = a
+}
 
-	if t.qElem == nil || t.getLZStop() == lzsBeforeUpdate {
-		e.pushCurrentTask(self)
+func (a *agent) removeChild(child *agent) {
+	assert.Assert(child != nil && child.parent == a, "child nil or parent not match")
+
+	if child == a.firstChild && a.firstChild.next == a.firstChild {
+		a.firstChild = nil
+	} else {
+		if child == a.firstChild {
+			a.firstChild = a.firstChild.next
+		}
+
+		child.prev.next = child.next
+		child.next.prev = child.prev
 	}
+
+	child.prev = nil
+	child.next = nil
+	child.parent = nil
 }
 
-type logicTask interface {
-	Task
-	onInit(*Env) bool
-	onUpdate(*Env) Result
-	onTerminate(*Env)
-	onStop(*Env)
-	onLazyStop(*Env)
-	onChildOver(Task, Result, *Env) Result
-}
+func (a *agent) getParent() *agent         { return a.parent }
+func (a *agent) getStatus() status         { return a.st }
+func (a *agent) setStatus(st status)       { a.st = st }
+func (a *agent) getLZStop() lazyStop       { return a.lzStop }
+func (a *agent) setLZStop(lzStop lazyStop) { a.lzStop = lzStop }
+func (a *agent) getElem() *element         { return a.elem }
+func (a *agent) setElem(elem *element)     { a.elem = elem }
 
-type logicTaskBase struct {
-	taskBase
-	self logicTask
-}
-
-func newLogicTask(self logicTask) logicTaskBase {
+func (a *agent) update(ctx *Context) Result {
 	if debug {
-		assert.Assert(self != nil, "self nil")
+		log.Printf("agent nodetype:%v update %v %v", a.node.NodeType(), a.getStatus(), a.getLZStop())
 	}
 
-	return logicTaskBase{
-		self: self,
-	}
-}
-
-func (t *logicTaskBase) ctr(node Node, parent Task) Task {
-	t.taskBase.ctr(node, parent)
-	return t.self
-}
-
-func (t *logicTaskBase) isBehavior() bool { return false }
-
-func (t *logicTaskBase) update(e *Env) Result {
-	if debug {
-		log.Printf("%s.update %v %v", reflect.TypeOf(t.self).Elem().Name(), t.getStatus(), t.getLZStop())
-	}
-
-	st := t.getStatus()
+	st := a.getStatus()
 
 	if debug {
-		assert.NotEqualF(st, sDestroyed, "%s.update: task already destroyed", reflect.TypeOf(t.self).Elem().Name())
+		assert.NotEqualF(st, sDestroyed, "agent nodetype:%v already destroyed", a.node.NodeType())
 	}
 
-	// update seri.
-	t.latestUpdateSeri = e.getUpdateSeri()
+	// Update seri.
+	a.latestUpdateSeri = ctx.getUpdateSeri()
 
-	// lazy stop before update.
-	lzStop := t.getLZStop()
+	// lazy Stop before Update.
+	lzStop := a.getLZStop()
 	if lzStop == lzsBeforeUpdate {
-		return t.doLazyStop(e)
+		return a.doLazyStop(ctx)
 	}
 
 	// init.
-	if st == sNone && !t.self.onInit(e) {
-		t.self.onTerminate(e)
-		t.setStatus(sTerminated)
-		return RFailure
+	if st == sNone {
+		if !a.task.OnInit(ctx.getNodeList(), ctx) {
+			a.task.OnTerminate(ctx)
+			a.setStatus(sTerminated)
+			return RFailure
+		}
+
+		if debug {
+			switch a.task.TaskType() {
+			case TaskSingle:
+				assert.AssertF(ctx.getNodeList().Len() == 0, "node type \"%s\" has children", a.node.NodeType().String())
+
+			case TaskSerial:
+				assert.AssertF(ctx.getNodeList().Len() == 1, "node type \"%s\" have no or more than one child", a.node.NodeType().String())
+
+			case TaskParallel:
+				assert.AssertF(ctx.getNodeList().Len() > 0, "node type \"%s\" have no children", a.node.NodeType().String())
+			}
+		}
+
+		a.processNextChildren(ctx)
 	}
 
-	// update.
-	result := t.self.onUpdate(e)
+	// Update.
+	result := a.task.OnUpdate(ctx)
 
-	// lazy stop after update
+	// lazy Stop after Update
 	if lzStop == lzsAfterUpdate {
-		return t.doLazyStop(e)
+		return a.doLazyStop(ctx)
 	}
 
 	if result == RRunning {
-		t.setStatus(sRunning)
+		a.setStatus(sRunning)
 	} else {
 		// terminate.
-		t.self.onTerminate(e)
-		t.setStatus(sTerminated)
+		a.task.OnTerminate(ctx)
+		a.setStatus(sTerminated)
 	}
 
 	return result
 }
 
-func (t *logicTaskBase) lazyStop(e *Env) {
-	t.taskBase.lazyStop(t.self, e)
+func (a *agent) processNextChildren(ctx *Context) {
+	nodeList := ctx.getNodeList()
+	for nextChildNode := nodeList.pop(); nextChildNode != nil; nextChildNode = nodeList.pop() {
+		childAgent := createAgent(nextChildNode)
+		a.addChild(childAgent)
+		ctx.pushCurrentAgent(childAgent)
+	}
 }
 
-func (t *logicTaskBase) doLazyStop(e *Env) Result {
-	t.self.onLazyStop(e)
-	t.self.onTerminate(e)
-	t.setStatus(sStopped)
-	t.setLZStop(lzsNone)
+func (a *agent) stop(ctx *Context) {
+	if a.getStatus() != sRunning {
+		return
+	}
+
+	if debug {
+		log.Printf("agent nodetype:%v stop", a.node.NodeType())
+	}
+
+	child := a.firstChild
+	for child != nil {
+		node := child
+		child = child.getNext()
+		a.removeChild(node)
+	}
+
+	a.task.OnTerminate(ctx)
+	a.setStatus(sStopped)
+	a.setLZStop(lzsNone)
+}
+
+func (a *agent) lazyStop(ctx *Context) {
+	if debug {
+		log.Printf("agent nodetype:%v lazyStop", a.node.NodeType())
+	}
+
+	st := a.getStatus()
+	if st == sStopped || st == sTerminated || a.getLZStop() != lzsNone {
+		return
+	}
+
+	if a.latestUpdateSeri != ctx.getUpdateSeri() {
+		a.setLZStop(lzsAfterUpdate)
+	} else {
+		a.setLZStop(lzsBeforeUpdate)
+	}
+
+	if a.elem == nil || a.getLZStop() == lzsBeforeUpdate {
+		ctx.pushCurrentAgent(a)
+	}
+}
+
+func (a *agent) doLazyStop(ctx *Context) Result {
+	a.lazyStopChildren(ctx)
+	a.task.OnTerminate(ctx)
+	a.setStatus(sStopped)
+	a.setLZStop(lzsNone)
 	return RFailure
 }
 
-func (t *logicTaskBase) stop(e *Env) {
-	if t.getStatus() != sRunning {
-		return
+func (a *agent) lazyStopChildren(ctx *Context) {
+	child := a.firstChild
+	for child != nil {
+		child.lazyStop(ctx)
+		node := child
+		child = child.getNext()
+		a.removeChild(node)
 	}
-
-	if debug {
-		log.Printf("%s.stop", reflect.TypeOf(t.self).Elem().Name())
-	}
-
-	t.self.onStop(e)
-	t.self.onTerminate(e)
-	t.setStatus(sStopped)
-	t.setLZStop(lzsNone)
 }
 
-func (t *logicTaskBase) childOver(child Task, r Result, e *Env) Result {
-	if t.getStatus() != sRunning {
+func (a *agent) onChildTerminated(child *agent, result Result, ctx *Context) Result {
+	if debug {
+		log.Printf("agent nodetype:%v onChildTerminated %v", a.node.NodeType(), result)
+		assert.Assert(a.task.TaskType() != TaskSingle, "shouldnt be singletask")
+		assert.Assert(child.getParent() == a, "invalid child")
+		assert.NotEqual(result, RRunning, "child terminated with running")
+	}
+
+	a.removeChild(child)
+
+	if a.getStatus() != sRunning {
 		return RFailure
 	}
 
-	if debug {
-		assert.Equal(child.getParent(), t.self, "invalid child")
-		assert.NotEqualF(r, RRunning, "child:%s over with running", reflect.TypeOf(child).Elem().Name())
-	}
-
-	if r = t.self.onChildOver(child, r, e); r != RRunning {
-		t.self.onTerminate(e)
-		t.setStatus(sNone)
-		t.setLZStop(lzsNone)
-	}
-
-	return r
-}
-
-func (t *logicTaskBase) destroy() {
-	if debug {
-		assert.NotEqualF(t.getStatus(), sDestroyed, "%s already destroyed", reflect.TypeOf(t.self).Elem().Name())
-		assert.NotEqualF(t.getStatus(), sRunning, "%s still running", reflect.TypeOf(t.self).Elem().Name())
-	}
-
-	t.setStatus(sDestroyed)
-	t.node.DestroyTask(t.self)
-}
-
-type oneChildNode interface {
-	Node
-	Child() Node
-	SetChild(Node)
-}
-
-type oneChildNodeBase struct {
-	nodeBase
-	self  Node
-	child Node
-}
-
-func newNodeOneChild(self Node) oneChildNodeBase {
-	if debug {
-		assert.Assert(self != nil, "self")
-	}
-
-	return oneChildNodeBase{
-		nodeBase: newNode(),
-		self:     self,
-	}
-}
-
-func (n *oneChildNodeBase) ChildCount() int {
-	if n.child == nil {
-		return 0
-	}
-
-	return 1
-}
-
-func (n *oneChildNodeBase) SetChild(child Node) {
-	assert.Assert(child != nil && child.Parent() == nil, "child nil or already has parent")
-
-	if n.child != nil {
-		n.child.setParent(nil)
-		n.child = nil
-	}
-
-	if child != nil {
-		child.setParent(n.self)
-		n.child = child
-	}
-}
-
-func (n *oneChildNodeBase) Child() Node { return n.child }
-
-func (n *oneChildNodeBase) FirstChild() Node {
-	return n.child
-}
-
-func (n *oneChildNodeBase) LastChild() Node {
-	return n.child
-}
-
-func (n *oneChildNodeBase) AddChild(child Node) {
-	if n.child != nil {
-		return
-	}
-
-	assert.Assert(child != nil && child.Parent() == nil, "child nil or already has parent")
-
-	n.SetChild(child)
-}
-
-func (n *oneChildNodeBase) AddChildBefore(child Node, before Node) {
-}
-
-func (n *oneChildNodeBase) AddChildAfter(child Node, after Node) {
-}
-
-func (n *oneChildNodeBase) RemoveChild(child Node) {
-	assert.Equal(child, n.child, "invalid child")
-
-	n.SetChild(nil)
-}
-
-func (n *oneChildNodeBase) MoveChildBefore(child Node, mark Node) {
-}
-
-func (n *oneChildNodeBase) MoveChildAfter(child Node, mark Node) {
-}
-
-type oneChildTask struct {
-	logicTaskBase
-	child Task
-}
-
-func newOneChildTask(self logicTask) oneChildTask {
-	t := oneChildTask{}
-	t.logicTaskBase = newLogicTask(self)
-	return t
-}
-
-func (t *oneChildTask) ctr(node oneChildNode, parent Task) Task {
-	return t.logicTaskBase.ctr(node, parent)
-}
-
-func (t *oneChildTask) dtr() {
-	if t.child != nil {
-		if debug {
-			log.Printf("%s.dtr() child not nil", reflect.TypeOf(t.self).Elem().Name())
-		}
-
-		t.child.destroy()
-		t.child = nil
-	}
-
-	t.logicTaskBase.dtr()
-}
-
-func (t *oneChildTask) getNode() oneChildNode {
-	return t.node.(oneChildNode)
-}
-
-func (t *oneChildTask) onInit(e *Env) bool {
-	node := t.getNode().Child()
-	if node == nil {
-		return false
-	}
-
-	if debug {
-		log.Printf("%s.onInit", reflect.TypeOf(t.self).Elem().Name())
-	}
-
-	t.child = node.CreateTask(t.self)
-	e.pushCurrentTask(t.child)
-	return true
-}
-
-func (t *oneChildTask) onUpdate(e *Env) Result {
-	return RRunning
-}
-
-func (t *oneChildTask) onTerminate(e *Env) {
-	t.child = nil
-}
-
-func (t *oneChildTask) onStop(e *Env) {
-	t.child.detachParent()
-}
-
-func (t *oneChildTask) onLazyStop(e *Env) {
-	if t.child != nil {
-		t.child.lazyStop(e)
-	}
-}
-
-func (t *oneChildTask) onChildOver(child Task, r Result, e *Env) Result {
-	if debug {
-		assert.Equal(child, t.child, "not child of it")
-	}
-
-	t.child = nil
-
-	if t.isLazyStop() {
+	if a.getLZStop() != lzsNone {
 		return RRunning
 	}
 
-	return r
+	if result = a.task.OnChildTerminated(result, ctx.getNodeList(), ctx); result == RRunning {
+		if debug {
+			switch a.task.TaskType() {
+			case TaskSerial:
+				assert.AssertF(ctx.getNodeList().Len() == 1, "node type \"%s\" has no or more than one next child", a.node.NodeType().String())
+
+			case TaskParallel:
+				assert.AssertF(ctx.getNodeList().Len() == 0, "node type \"%s\" has next children", a.node.NodeType().String())
+			}
+		}
+
+		a.processNextChildren(ctx)
+	} else {
+		if debug {
+			assert.AssertF(ctx.getNodeList().Len() == 0, "node type \"%s\" has next children on terminating.", a.node.NodeType())
+		}
+
+		a.lazyStopChildren(ctx)
+		a.task.OnTerminate(ctx)
+		a.setStatus(sTerminated)
+		a.setLZStop(lzsNone)
+	}
+
+	return result
+}
+
+var agentPool = newPool(func() interface{} { return &agent{} })
+
+func createAgent(node Node) *agent {
+	nodeMETA := getNodeMETAByType(node.NodeType())
+	if nodeMETA == nil {
+		panic(fmt.Sprintf("node type %d meta not found, %s", node.NodeType(), reflect.TypeOf(node).Elem().Name()))
+	}
+
+	task := nodeMETA.createTask(node)
+	switch task.TaskType() {
+	case TaskSingle, TaskSerial, TaskParallel:
+	default:
+		panic(fmt.Sprintf("node type \"%s\" create invalid type %d task", node.NodeType().String(), task.TaskType()))
+	}
+
+	agent := agentPool.get().(*agent)
+	agent.onCreate(node, task)
+
+	return agent
+}
+
+func destroyAgent(agent *agent) {
+	if debug {
+		assert.AssertF(agent.getElem() == nil, "agent node type \"%s\" still in list on destroy", agent.node.NodeType().String())
+	}
+
+	node := agent.node
+	nodeMETA := getNodeMETAByType(node.NodeType())
+	if nodeMETA == nil {
+		panic(fmt.Sprintf("node type %d meta not found, %s", node.NodeType(), reflect.TypeOf(node).Elem().Name()))
+	}
+
+	nodeMETA.destroyTask(agent.task)
+	agent.onDestroy()
+	agentPool.put(agent)
 }
 
 type rootNode struct {
-	oneChildNodeBase
+	child Node
 }
 
-func newRoot() *rootNode {
-	r := new(rootNode)
-	r.oneChildNodeBase = newNodeOneChild(r)
-	return r
+func newRootNode() *rootNode {
+	return &rootNode{}
 }
 
 func (rootNode) NodeType() NodeType { return root }
+func (rootNode) Parent() Node       { return nil }
+func (rootNode) SetParent(Node)     {}
+func (r *rootNode) Child() Node     { return r.child }
 
-func (rootNode) Parent() Node   { return nil }
-func (rootNode) setParent(Node) {}
+func (r *rootNode) SetChild(child Node) {
+	assert.Assert(child == nil || child.Parent() == nil, "child already has parent")
 
-func (rootNode) PrevSibling() Node   { return nil }
-func (rootNode) setPrevSibling(Node) {}
-func (rootNode) NextSibling() Node   { return nil }
-func (rootNode) setNextSibling(Node) {}
+	if r.child != nil {
+		r.child.SetParent(nil)
+		r.child = nil
+	}
 
-func (r *rootNode) CreateTask(_ Task) Task {
-	return rootTaskPool.get().(*rootTask).ctr(r)
+	if child != nil {
+		child.SetParent(r)
+		r.child = child
+	}
 }
-
-func (r *rootNode) DestroyTask(t Task) {
-	t.(*rootTask).dtr()
-	rootTaskPool.put(t)
-}
-
-var rootTaskPool = newTaskPool(func() Task { return newRootTask() })
 
 type rootTask struct {
-	oneChildTask
+	node *rootNode
 }
 
-func newRootTask() *rootTask {
-	t := &rootTask{}
-	t.oneChildTask = newOneChildTask(t)
-	return t
+func (r *rootTask) TaskType() TaskType { return TaskSerial }
+func (r *rootTask) OnCreate(node Node) { r.node = node.(*rootNode) }
+func (r *rootTask) OnDestroy()         { r.node = nil }
+
+func (r *rootTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
+	if r.node.Child() == nil {
+		return false
+	} else {
+		nextNodes.Push(r.node.Child())
+		return true
+	}
 }
 
-func (t *rootTask) ctr(node *rootNode) Task {
-	return t.oneChildTask.ctr(node, nil)
+func (r *rootTask) OnUpdate(ctx *Context) Result { return RRunning }
+func (r *rootTask) OnTerminate(ctx *Context)     {}
+func (r *rootTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
+	return result
 }
 
 type BevTree struct {
-	root_ *rootNode
+	root *rootNode
 }
 
 func NewBevTree() *BevTree {
 	tree := &BevTree{
-		root_: newRoot(),
+		root: newRootNode(),
 	}
 	return tree
 }
 
-func (t *BevTree) Root() *rootNode { return t.root_ }
+func (t *BevTree) Root() *rootNode { return t.root }
 
 func (t *BevTree) Clear() {
-	t.root_.SetChild(nil)
+	t.root.SetChild(nil)
 }
 
-func (t *BevTree) Update(e *Env) Result {
-	if e.noTasks() {
-		e.pushCurrentTask(t.root_.CreateTask(nil))
+func (t *BevTree) Update(ctx *Context) Result {
+	if ctx.noAgents() {
+		ctx.pushCurrentAgent(createAgent(t.root))
 	}
 
-	e.update()
+	ctx.update()
 
 	result := RRunning
-	for task := e.popCurrentTask(); task != nil; task = e.popCurrentTask() {
-		r := task.update(e)
-		st := task.getStatus()
+	for agent := ctx.popCurrentAgent(); agent != nil; agent = ctx.popCurrentAgent() {
+		r := agent.update(ctx)
+		st := agent.getStatus()
 		if st == sStopped {
-			task.destroy()
+			destroyAgent(agent)
 			continue
 		}
 
 		if st == sTerminated {
-			over := true
-			for task.getParent() != nil {
-				parent := task.getParent()
-				if parent.getStatus() != sRunning {
-					over = false
+			terminated := true
+			for agent.getParent() != nil {
+				parent := agent.getParent()
+				parentTerminated := parent.getStatus() != sRunning
+
+				r = parent.onChildTerminated(agent, r, ctx)
+				if parentTerminated || r == RRunning {
+					terminated = false
 					break
 				}
 
-				r = parent.childOver(task, r, e)
+				assert.Assert(parent.getElem() == nil, "parent is still in work list")
 
-				if r == RRunning {
-					over = false
-					break
-				}
-
-				assert.Assert(!parent.isInQue(), "parent is over but in Que")
-
-				task.destroy()
-				task = parent
+				destroyAgent(agent)
+				agent = parent
 			}
 
-			task.destroy()
+			destroyAgent(agent)
 
-			if over {
-				assert.Equal(result, RRunning, "update over reapeatedly")
-				assert.NotEqual(r, RRunning, "update over with RRunning")
+			if terminated {
+				assert.Equal(result, RRunning, "Update terminated reapeatedly")
+				assert.NotEqual(r, RRunning, "Update terminated with RRunning")
 
 				result = r
 			}
-		} else if task.isBehavior() {
-			e.pushNextTask(task)
+		} else if agent.isPersistent() {
+			ctx.pushNextAgent(agent)
 		}
 	}
 
-	assert.Assert(result == RRunning || e.noTasks(), "update over but already has tasks")
+	assert.Assert(result == RRunning || ctx.noAgents(), "Update terminated but already has agents")
 
 	return result
 }
 
-func (t *BevTree) Stop(e *Env) {
-	e.reset()
+func (t *BevTree) Stop(ctx *Context) {
+	ctx.reset()
 }

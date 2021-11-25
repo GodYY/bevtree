@@ -2,53 +2,37 @@
 
 package bevtree
 
-import (
-	"reflect"
-	"sync/atomic"
+import "sync/atomic"
 
-	"github.com/GodYY/gutils/assert"
-)
-
-var taskTotalGetTimes int64
-var taskTotalPutTimes int64
-
-func getTaskTotalGetTimes() int64 {
-	return atomic.LoadInt64(&taskTotalGetTimes)
+type poolDebug struct {
+	totalGet int64
+	totalPut int64
 }
 
-func getTaskTotalPutTimes() int64 {
-	return atomic.LoadInt64(&taskTotalPutTimes)
+func (p *poolDebug) get() {
+	atomic.AddInt64(&p.totalGet, 1)
 }
 
-func (p *taskPool) get() task {
-	atomic.AddInt64(&taskTotalGetTimes, 1)
-	return p.p.Get().(task)
+func (p *poolDebug) put() {
+	atomic.AddInt64(&p.totalPut, 1)
 }
 
-func (p *taskPool) put(task task) {
-	assert.Equal(reflect.TypeOf(task).Elem(), p.tt, "invalid task type")
-	atomic.AddInt64(&taskTotalPutTimes, 1)
-	p.p.Put(task)
+func (p *poolDebug) getTotal() int64 {
+	return atomic.LoadInt64(&p.totalGet)
 }
 
-var taskElemTotalGetTimes int64
-var taskElemTotalPutTimes int64
-
-func getTaskElemTotalGetTimes() int64 {
-	return atomic.LoadInt64(&taskElemTotalGetTimes)
+func (p *poolDebug) putTotal() int64 {
+	return atomic.LoadInt64(&p.totalPut)
 }
 
-func getTaskElemTotalPutTimes() int64 {
-	return atomic.LoadInt64(&taskElemTotalPutTimes)
+var _poolDebug poolDebug
+
+func (p *pool) get() interface{} {
+	_poolDebug.get()
+	return p.p.Get()
 }
 
-func getTaskQueElem() *taskQueElem {
-	atomic.AddInt64(&taskElemTotalGetTimes, 1)
-	return taskElemPool.Get().(*taskQueElem)
-}
-
-func putTaskQueElem(e *taskQueElem) {
-	assert.Assert(e != nil, "elem nil")
-	atomic.AddInt64(&taskElemTotalPutTimes, 1)
-	taskElemPool.Put(e)
+func (p *pool) put(i interface{}) {
+	_poolDebug.put()
+	p.p.Put(i)
 }
