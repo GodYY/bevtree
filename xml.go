@@ -471,7 +471,7 @@ func (d *decoratorNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) erro
 	return e.EncodeNode(d.child, xml.StartElement{Name: createXMLName(xmlNameChild)})
 }
 
-func (d *decoratorNode) UnmarshalBTXML(self DecoratorNode, dec *XMLDecoder, start xml.StartElement, f DecodeXMLCallback) error {
+func (d *decoratorNode) UnmarshalBTXML(dec *XMLDecoder, start xml.StartElement, f DecodeXMLCallback) error {
 	return dec.DecodeEndTo(start.End(), func(dec *XMLDecoder, s xml.StartElement) error {
 		if s.Name == createXMLName(xmlNameChild) {
 			if d.Child() != nil {
@@ -483,7 +483,8 @@ func (d *decoratorNode) UnmarshalBTXML(self DecoratorNode, dec *XMLDecoder, star
 				return errXMLElemErr(err, start)
 			}
 
-			d.SetChild(self, child)
+			d.child = child
+
 			return nil
 		} else if f != nil {
 			return f(dec, s)
@@ -497,14 +498,28 @@ func (i *InverterNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) err
 	if debug {
 		log.Printf("InverterNode.UnmarshalBTXML start:%v", start)
 	}
-	return i.decoratorNode.UnmarshalBTXML(i, d, start, nil)
+
+	err := i.decoratorNode.UnmarshalBTXML(d, start, nil)
+	if err == nil {
+		i.child.SetParent(i)
+		return err
+	}
+
+	return err
 }
 
 func (s *SucceederNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 	if debug {
 		log.Printf("SucceederNode.UnmarshalBTXML start:%v", start)
 	}
-	return s.decoratorNode.UnmarshalBTXML(s, d, start, nil)
+
+	err := s.decoratorNode.UnmarshalBTXML(d, start, nil)
+	if err == nil {
+		s.child.SetParent(s)
+		return err
+	}
+
+	return err
 }
 
 func (r *RepeaterNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
@@ -528,7 +543,7 @@ func (r *RepeaterNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) err
 
 	bLimited := false
 
-	return r.decoratorNode.UnmarshalBTXML(r, d, start, func(d *XMLDecoder, s xml.StartElement) error {
+	err := r.decoratorNode.UnmarshalBTXML(d, start, func(d *XMLDecoder, s xml.StartElement) error {
 		if s.Name == createXMLName(xmlNameLimited) {
 			if debug {
 				log.Printf("RepeaterNode.unmarshalBTXML limited")
@@ -547,6 +562,11 @@ func (r *RepeaterNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) err
 
 		return nil
 	})
+	if err == nil {
+		r.child.SetParent(r)
+	}
+
+	return err
 }
 
 func (r *RepeatUntilFailNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
@@ -570,7 +590,7 @@ func (r *RepeatUntilFailNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartEleme
 
 	bSuccessOnFail := false
 
-	return r.decoratorNode.UnmarshalBTXML(r, d, start, func(d *XMLDecoder, s xml.StartElement) error {
+	err := r.decoratorNode.UnmarshalBTXML(d, start, func(d *XMLDecoder, s xml.StartElement) error {
 		if s.Name == createXMLName(xmlNameSuccessOnFail) {
 			if debug {
 				log.Printf("RepeatUntilFailNodee.unmarshalBTXML successOnFail start:%v", s)
@@ -589,6 +609,11 @@ func (r *RepeatUntilFailNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartEleme
 
 		return nil
 	})
+	if err == nil {
+		r.child.SetParent(r)
+	}
+
+	return err
 }
 
 func (c *compositeNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
@@ -620,9 +645,11 @@ func (c *compositeNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) erro
 	return nil
 }
 
-func (c *compositeNode) UnmarshalBTXML(self CompositeNode, d *XMLDecoder, start xml.StartElement) error {
+func (c *compositeNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 	var childCount int
-	return d.DecodeEndTo(start.End(), func(d *XMLDecoder, s xml.StartElement) error {
+	var childs []Node
+
+	err := d.DecodeEndTo(start.End(), func(d *XMLDecoder, s xml.StartElement) error {
 		if s.Name == createXMLName(xmlNameChilds) {
 			if c.childs != nil {
 				return errXMLMultiElem(start, s.Name)
@@ -637,17 +664,17 @@ func (c *compositeNode) UnmarshalBTXML(self CompositeNode, d *XMLDecoder, start 
 					} else if childCount <= 0 {
 						return errXMLChildElemF(start, s, "attribute \"%s\" invalid", xmlNameToString(xmlCountName))
 					} else {
-						c.childs = make([]Node, 0, childCount)
+						childs = make([]Node, 0, childCount)
 					}
 					break
 				}
 			}
 
-			if c.childs == nil {
+			if childs == nil {
 				return errXMLAttrNotFound(s, xmlCountName)
 			}
 		} else if s.Name == createXMLName(xmlNameChild) {
-			if len(c.childs) == childCount {
+			if len(childs) == childCount {
 				return errXMLChildElemF(start, s, "number of \"%s\" greater than %d", xmlNameToString(createXMLName(xmlNameChild)), childCount)
 			}
 
@@ -656,47 +683,93 @@ func (c *compositeNode) UnmarshalBTXML(self CompositeNode, d *XMLDecoder, start 
 				return errors.WithMessagef(err, "%s unmarshal No.%d child", xmlTokenToString(start), c.ChildCount())
 			}
 
-			c.AddChild(self, node)
+			childs = append(childs, node)
+
 			return nil
 		}
 
 		return nil
 	})
+	if err == nil {
+		c.childs = childs
+	}
+
+	return err
 }
 
 func (s *SequenceNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 	if debug {
 		log.Printf("SequenceNode.MarshalBTXML start:%v", start)
 	}
-	return s.compositeNode.UnmarshalBTXML(s, d, start)
+
+	err := s.compositeNode.UnmarshalBTXML(d, start)
+	if err == nil {
+		for _, v := range s.childs {
+			v.SetParent(s)
+		}
+	}
+
+	return err
 }
 
 func (s *SelectorNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 	if debug {
 		log.Printf("SelectorNode.MarshalBTXML start:%v", start)
 	}
-	return s.compositeNode.UnmarshalBTXML(s, d, start)
+
+	err := s.compositeNode.UnmarshalBTXML(d, start)
+	if err == nil {
+		for _, v := range s.childs {
+			v.SetParent(s)
+		}
+	}
+
+	return err
 }
 
 func (r *RandSequenceNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 	if debug {
 		log.Printf("RandSequenceNode.MarshalBTXML start:%v", start)
 	}
-	return r.compositeNode.UnmarshalBTXML(r, d, start)
+
+	err := r.compositeNode.UnmarshalBTXML(d, start)
+	if err == nil {
+		for _, v := range r.childs {
+			v.SetParent(r)
+		}
+	}
+
+	return err
 }
 
 func (r *RandSelectorNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 	if debug {
 		log.Printf("RandSelectorNode.MarshalBTXML start:%v", start)
 	}
-	return r.compositeNode.UnmarshalBTXML(r, d, start)
+
+	err := r.compositeNode.UnmarshalBTXML(d, start)
+	if err == nil {
+		for _, v := range r.childs {
+			v.SetParent(r)
+		}
+	}
+
+	return err
 }
 
-func (r *ParallelNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
+func (p *ParallelNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 	if debug {
 		log.Printf("ParallelNode.MarshalBTXML start:%v", start)
 	}
-	return r.compositeNode.UnmarshalBTXML(r, d, start)
+
+	err := p.compositeNode.UnmarshalBTXML(d, start)
+	if err == nil {
+		for _, v := range p.childs {
+			v.SetParent(p)
+		}
+	}
+
+	return err
 }
 
 func (t BevType) MarshalXMLAttr(name xml.Name) (xml.Attr, error) {

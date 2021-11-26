@@ -517,3 +517,81 @@ func TestReset(t *testing.T) {
 		tree.Stop(e)
 	}
 }
+
+func TestRemoveChild(t *testing.T) {
+	key := "key"
+	sum := 0
+
+	unit := 1
+
+	rand.Seed(time.Now().UnixNano())
+
+	tree := NewBevTree()
+	paral := NewParallelNode()
+	tree.Root().SetChild(paral)
+
+	bd := newBevBBIncr(key, unit)
+
+	sc := NewSucceederNode()
+	sc.SetChild(NewBevNode(bd))
+	paral.AddChild(sc)
+	sum += unit
+
+	low := 5
+	max := 10
+	rtimes := low + rand.Intn(max-low+1)
+	r := NewRepeaterNode(rtimes)
+	r.SetChild(NewBevNode(bd))
+	paral.AddChild(r)
+	sum += rtimes * unit
+
+	iv_sc := NewSucceederNode()
+	iv := NewInverterNode()
+	iv.SetChild(NewBevNode(bd))
+	iv_sc.SetChild(iv)
+	paral.AddChild(iv_sc)
+	sum += unit
+
+	ruf := NewRepeatUntilFailNode(true)
+	ruf_iv := NewInverterNode()
+	ruf.SetChild(ruf_iv)
+	ruf_iv.SetChild(NewBevNode(bd))
+	paral.AddChild(ruf)
+	sum += unit
+
+	seqTimes := low + rand.Intn(max-low+1)
+	seq := NewSequenceNode()
+	for i := 0; i < seqTimes; i++ {
+		seq.AddChild(NewBevNode(bd))
+	}
+	paral.AddChild(seq)
+	sum += seqTimes * unit
+
+	selcTimes := low + rand.Intn(max-low+1)
+	selc := NewSelectorNode()
+	selcSuccN := rand.Intn(selcTimes)
+	for i := 0; i < selcTimes; i++ {
+		if selcSuccN == i {
+			selc.AddChild(NewBevNode(bd))
+		} else {
+			iv := NewInverterNode()
+			iv.SetChild(NewBevNode(bd))
+			selc.AddChild(iv)
+		}
+	}
+	paral.AddChild(selc)
+	sum += (selcSuccN + 1) * unit
+
+	for paral.ChildCount() > 0 {
+		paral.RemoveChild(0)
+	}
+
+	if paral.ChildCount() > 0 {
+		t.FailNow()
+	}
+
+	context := NewContext(nil)
+	if tree.Update(context) != RFailure {
+		t.FailNow()
+	}
+}

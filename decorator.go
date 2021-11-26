@@ -23,18 +23,18 @@ func newDecoratorNode() decoratorNode {
 
 func (d *decoratorNode) Child() Node { return d.child }
 
-func (d *decoratorNode) SetChild(self DecoratorNode, child Node) {
-	assert.Assert(child == nil || child.Parent() == nil, "child already has parent")
+func (d *decoratorNode) SetChild(child Node) bool {
+	if child == nil || child.Parent() != nil {
+		return false
+	}
 
 	if d.child != nil {
 		d.child.SetParent(nil)
-		d.child = nil
 	}
 
-	if child != nil {
-		child.SetParent(self)
-		d.child = child
-	}
+	d.child = child
+
+	return child != nil
 }
 
 type InverterNode struct {
@@ -47,7 +47,11 @@ func NewInverterNode() *InverterNode {
 
 func (i *InverterNode) NodeType() NodeType { return inverter }
 
-func (i *InverterNode) SetChild(child Node) { i.decoratorNode.SetChild(i, child) }
+func (i *InverterNode) SetChild(child Node) {
+	if i.decoratorNode.SetChild(child) {
+		child.SetParent(i)
+	}
+}
 
 type inverterTask struct {
 	node *InverterNode
@@ -85,8 +89,13 @@ func NewSucceederNode() *SucceederNode {
 	return &SucceederNode{decoratorNode: newDecoratorNode()}
 }
 
-func (s *SucceederNode) NodeType() NodeType  { return succeeder }
-func (s *SucceederNode) SetChild(child Node) { s.decoratorNode.SetChild(s, child) }
+func (s *SucceederNode) NodeType() NodeType { return succeeder }
+
+func (s *SucceederNode) SetChild(child Node) {
+	if s.decoratorNode.SetChild(child) {
+		child.SetParent(s)
+	}
+}
 
 type succeederTask struct {
 	node *SucceederNode
@@ -131,8 +140,13 @@ func NewRepeaterNode(limited int) *RepeaterNode {
 	return r
 }
 
-func (r *RepeaterNode) NodeType() NodeType  { return repeater }
-func (r *RepeaterNode) SetChild(child Node) { r.decoratorNode.SetChild(r, child) }
+func (r *RepeaterNode) NodeType() NodeType { return repeater }
+
+func (r *RepeaterNode) SetChild(child Node) {
+	if r.decoratorNode.SetChild(child) {
+		child.SetParent(r)
+	}
+}
 
 type repeaterTask struct {
 	node  *RepeaterNode
@@ -177,8 +191,13 @@ func NewRepeatUntilFailNode(successOnFail bool) *RepeatUntilFailNode {
 	}
 }
 
-func (r *RepeatUntilFailNode) NodeType() NodeType  { return repeatUntilFail }
-func (r *RepeatUntilFailNode) SetChild(child Node) { r.decoratorNode.SetChild(r, child) }
+func (r *RepeatUntilFailNode) NodeType() NodeType { return repeatUntilFail }
+
+func (r *RepeatUntilFailNode) SetChild(child Node) {
+	if r.decoratorNode.SetChild(child) {
+		child.SetParent(r)
+	}
+}
 
 type repeatUntilFailTask struct {
 	node *RepeatUntilFailNode

@@ -2,8 +2,6 @@ package bevtree
 
 import (
 	"math/rand"
-
-	"github.com/GodYY/gutils/assert"
 )
 
 type CompositeNode interface {
@@ -33,15 +31,13 @@ func (c *compositeNode) Child(idx int) Node {
 	return c.childs[idx]
 }
 
-func (c *compositeNode) AddChild(self CompositeNode, child Node) {
-	assert.Assert(self != nil, "self nil")
-
-	if child == nil {
-		return
+func (c *compositeNode) AddChild(child Node) bool {
+	if child == nil || child.Parent() != nil {
+		return false
 	}
 
-	child.SetParent(self)
 	c.childs = append(c.childs, child)
+	return true
 }
 
 func (c *compositeNode) RemoveChild(idx int) Node {
@@ -51,7 +47,7 @@ func (c *compositeNode) RemoveChild(idx int) Node {
 
 	child := c.childs[idx]
 	child.SetParent(nil)
-	c.childs = append(c.childs[0:idx], c.childs[idx+1:]...)
+	c.childs = append(c.childs[:idx], c.childs[idx+1:]...)
 	return child
 }
 
@@ -65,8 +61,13 @@ func NewSequenceNode() *SequenceNode {
 	}
 }
 
-func (s *SequenceNode) NodeType() NodeType  { return sequence }
-func (s *SequenceNode) AddChild(child Node) { s.compositeNode.AddChild(s, child) }
+func (s *SequenceNode) NodeType() NodeType { return sequence }
+
+func (s *SequenceNode) AddChild(child Node) {
+	if s.compositeNode.AddChild(child) {
+		child.SetParent(s)
+	}
+}
 
 type sequenceTask struct {
 	node        *SequenceNode
@@ -114,8 +115,13 @@ func NewSelectorNode() *SelectorNode {
 	}
 }
 
-func (s *SelectorNode) NodeType() NodeType  { return selector }
-func (s *SelectorNode) AddChild(child Node) { s.compositeNode.AddChild(s, child) }
+func (s *SelectorNode) NodeType() NodeType { return selector }
+
+func (s *SelectorNode) AddChild(child Node) {
+	if s.compositeNode.AddChild(child) {
+		child.SetParent(s)
+	}
+}
 
 type selectorTask struct {
 	node        *SelectorNode
@@ -153,33 +159,33 @@ func (s *selectorTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx
 	}
 }
 
-func genRandChildNodes(node CompositeNode) []Node {
-	childCount := node.ChildCount()
-	if childCount == 0 {
+func genRandNodes(nodes []Node) []Node {
+	count := len(nodes)
+	if count == 0 {
 		return nil
 	}
 
-	childs := make([]Node, childCount)
-	for i := childCount - 1; i > 0; i-- {
-		if childs[i] == nil {
-			childs[i] = node.Child(i)
+	result := make([]Node, count)
+	for i := count - 1; i > 0; i-- {
+		if result[i] == nil {
+			result[i] = nodes[i]
 		}
 
 		k := rand.Intn(i + 1)
 		if k != i {
-			if childs[k] == nil {
-				childs[k] = node.Child(k)
+			if result[k] == nil {
+				result[k] = nodes[k]
 			}
 
-			childs[k], childs[i] = childs[i], childs[k]
+			result[k], result[i] = result[i], result[k]
 		}
 	}
 
-	if childs[0] == nil {
-		childs[0] = node.Child(0)
+	if result[0] == nil {
+		result[0] = nodes[0]
 	}
 
-	return childs
+	return result
 }
 
 type RandSequenceNode struct {
@@ -192,8 +198,13 @@ func NewRandSequenceNode() *RandSequenceNode {
 	}
 }
 
-func (s *RandSequenceNode) NodeType() NodeType  { return randSequence }
-func (s *RandSequenceNode) AddChild(child Node) { s.compositeNode.AddChild(s, child) }
+func (s *RandSequenceNode) NodeType() NodeType { return randSequence }
+
+func (s *RandSequenceNode) AddChild(child Node) {
+	if s.compositeNode.AddChild(child) {
+		child.SetParent(s)
+	}
+}
 
 type randSequenceTask struct {
 	node        *RandSequenceNode
@@ -214,7 +225,7 @@ func (s *randSequenceTask) OnDestroy() {
 }
 
 func (s *randSequenceTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
-	if s.childs = genRandChildNodes(s.node); len(s.childs) == 0 {
+	if s.childs = genRandNodes(s.node.childs); len(s.childs) == 0 {
 		return false
 	} else {
 		nextNodes.Push(s.childs[s.curChildIdx])
@@ -246,8 +257,13 @@ func NewRandSelectorNode() *RandSelectorNode {
 	}
 }
 
-func (s *RandSelectorNode) NodeType() NodeType  { return randSelector }
-func (s *RandSelectorNode) AddChild(child Node) { s.compositeNode.AddChild(s, child) }
+func (s *RandSelectorNode) NodeType() NodeType { return randSelector }
+
+func (s *RandSelectorNode) AddChild(child Node) {
+	if s.compositeNode.AddChild(child) {
+		child.SetParent(s)
+	}
+}
 
 type randSelectorTask struct {
 	node        *RandSelectorNode
@@ -268,7 +284,7 @@ func (s *randSelectorTask) OnDestroy() {
 }
 
 func (s *randSelectorTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
-	s.childs = genRandChildNodes(s.node)
+	s.childs = genRandNodes(s.node.childs)
 	if len(s.childs) == 0 {
 		return false
 	} else {
@@ -301,8 +317,13 @@ func NewParallelNode() *ParallelNode {
 	}
 }
 
-func (p *ParallelNode) NodeType() NodeType  { return parallel }
-func (p *ParallelNode) AddChild(child Node) { p.compositeNode.AddChild(p, child) }
+func (p *ParallelNode) NodeType() NodeType { return parallel }
+
+func (p *ParallelNode) AddChild(child Node) {
+	if p.compositeNode.AddChild(child) {
+		child.SetParent(p)
+	}
+}
 
 type parallelTask struct {
 	node      *ParallelNode
