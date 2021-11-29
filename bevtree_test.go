@@ -1,30 +1,35 @@
 package bevtree
 
 import (
-	"encoding/xml"
 	"math/rand"
 	"testing"
 	"time"
 )
 
 var (
-	btFunc   = RegisterBevType("func", func() Bev { return new(bevFunc) })
-	btIncr   = RegisterBevType("incr", func() Bev { return new(behaviorIncr) })
-	btUpdate = RegisterBevType("update", func() Bev { return new(behaviorUpdate) })
+	btFunc   = RegisterBevType("func", func() Bev { return new(bevFunc) }, func() BevParams { return new(bevFuncParams) })
+	btIncr   = RegisterBevType("incr", func() Bev { return new(behaviorIncr) }, func() BevParams { return new(behaviorIncrParams) })
+	btUpdate = RegisterBevType("update", func() Bev { return new(behaviorUpdate) }, func() BevParams { return new(behaviorUpdateParams) })
 )
 
-type bevFunc struct {
+type bevFuncParams struct {
 	f func(*Context) Result
 }
 
-func newBevFunc(f func(*Context) Result) *bevFunc {
-	return &bevFunc{f: f}
+func newBevFuncParams(f func(*Context) Result) *bevFuncParams {
+	return &bevFuncParams{f: f}
+}
+
+func (bevFuncParams) BevType() BevType { return btFunc }
+
+type bevFunc struct {
+	*bevFuncParams
 }
 
 func (b *bevFunc) BevType() BevType { return btFunc }
 
-func (b *bevFunc) OnCreate(template Bev) {
-	b.f = template.(*bevFunc).f
+func (b *bevFunc) OnCreate(params BevParams) {
+	b.bevFuncParams = params.((*bevFuncParams))
 }
 
 func (b *bevFunc) OnDestroy() {}
@@ -39,34 +44,25 @@ func (b *bevFunc) OnUpdate(e *Context) Result {
 func (b *bevFunc) OnTerminate(e *Context) {
 }
 
-func (b *bevFunc) Clone() Bev {
-	return newBevFunc(b.f)
-}
-
-func (b *bevFunc) Destroy() {}
-
-func (b *bevFunc) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error { return nil }
-
-func (b *bevFunc) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error { return nil }
-
-type behaviorIncr struct {
+type behaviorIncrParams struct {
 	key     string
 	limited int
-	count   int
 }
 
-func newBehaviorIncr(key string, limited int) *behaviorIncr {
-	return &behaviorIncr{
-		key:     key,
-		limited: limited,
-	}
+func newBehaviorIncrParams(key string, limited int) *behaviorIncrParams {
+	return &behaviorIncrParams{key: key, limited: limited}
+}
+
+func (behaviorIncrParams) BevType() BevType { return btIncr }
+
+type behaviorIncr struct {
+	*behaviorIncrParams
+	count int
 }
 
 func (b *behaviorIncr) BevType() BevType { return btIncr }
-func (b *behaviorIncr) OnCreate(template Bev) {
-	tmpl := template.(*behaviorIncr)
-	b.key = tmpl.key
-	b.limited = tmpl.limited
+func (b *behaviorIncr) OnCreate(params BevParams) {
+	b.behaviorIncrParams = params.(*behaviorIncrParams)
 	b.count = 0
 }
 func (b *behaviorIncr) OnDestroy() {}
@@ -87,25 +83,27 @@ func (b *behaviorIncr) OnUpdate(e *Context) Result {
 	return RRunning
 }
 
-func (b *behaviorIncr) OnTerminate(e *Context)                             { b.count = 0 }
-func (b *behaviorIncr) MarshalBTXML(*XMLEncoder, xml.StartElement) error   { return nil }
-func (b *behaviorIncr) UnmarshalBTXML(*XMLDecoder, xml.StartElement) error { return nil }
+func (b *behaviorIncr) OnTerminate(e *Context) { b.count = 0 }
 
-type behaviorUpdate struct {
+type behaviorUpdateParams struct {
 	limited int
-	count   int
 }
 
-func newBehaviorUpdate(limited int) *behaviorUpdate {
-	return &behaviorUpdate{
-		limited: limited,
-	}
+func newBehaviorUpdateParams(lmited int) *behaviorUpdateParams {
+	return &behaviorUpdateParams{limited: lmited}
+}
+
+func (behaviorUpdateParams) BevType() BevType { return btUpdate }
+
+type behaviorUpdate struct {
+	*behaviorUpdateParams
+	count int
 }
 
 func (b *behaviorUpdate) BevType() BevType { return btUpdate }
 
-func (b *behaviorUpdate) OnCreate(template Bev) {
-	b.limited = template.(*behaviorUpdate).limited
+func (b *behaviorUpdate) OnCreate(params BevParams) {
+	b.behaviorUpdateParams = params.(*behaviorUpdateParams)
 	b.count = 0
 }
 
@@ -126,9 +124,7 @@ func (b *behaviorUpdate) OnUpdate(e *Context) Result {
 	return RRunning
 }
 
-func (b *behaviorUpdate) OnTerminate(e *Context)                             { b.count = 0 }
-func (b *behaviorUpdate) MarshalBTXML(*XMLEncoder, xml.StartElement) error   { return nil }
-func (b *behaviorUpdate) UnmarshalBTXML(*XMLDecoder, xml.StartElement) error { return nil }
+func (b *behaviorUpdate) OnTerminate(e *Context) { b.count = 0 }
 
 type test struct {
 	tree *BevTree
@@ -197,7 +193,7 @@ func TestSequence(t *testing.T) {
 	test.e.SetInt(key, 0)
 	n := 2
 	for i := 0; i < n; i++ {
-		seq.AddChild(NewBevNode(newBevFunc(func(e *Context) Result {
+		seq.AddChild(NewBevNode(newBevFuncParams(func(e *Context) Result {
 			e.IncInt(key)
 			return RSuccess
 		})))
@@ -218,7 +214,7 @@ func TestSelector(t *testing.T) {
 	n := 10
 	for i := 0; i < n; i++ {
 		k := i
-		selc.AddChild(NewBevNode(newBevFunc((func(e *Context) Result {
+		selc.AddChild(NewBevNode(newBevFuncParams((func(e *Context) Result {
 			if k == selected {
 				test.e.SetInt(key, selected)
 				return RSuccess
@@ -248,7 +244,7 @@ func TestRandomSequence(t *testing.T) {
 	n := 2
 	for i := 0; i < n; i++ {
 		k := i
-		seq.AddChild(NewBevNode(newBevFunc(func(e *Context) Result {
+		seq.AddChild(NewBevNode(newBevFuncParams(func(e *Context) Result {
 			t.Log("seq", k, "update")
 			e.IncInt(key)
 			return RSuccess
@@ -272,7 +268,7 @@ func TestRandomSelector(t *testing.T) {
 	n := 10
 	for i := 0; i < n; i++ {
 		k := i
-		selc.AddChild(NewBevNode(newBevFunc((func(e *Context) Result {
+		selc.AddChild(NewBevNode(newBevFuncParams((func(e *Context) Result {
 			t.Log("seq", k, "update")
 			if k == selected {
 				test.e.SetInt(key, selected)
@@ -302,7 +298,7 @@ func TestParallel(t *testing.T) {
 	for i := 0; i < n; i++ {
 		k := i + 1
 		timer := time.NewTimer(1000 * time.Millisecond * time.Duration(k))
-		paral.AddChild(NewBevNode(newBevFunc(func(e *Context) Result {
+		paral.AddChild(NewBevNode(newBevFuncParams(func(e *Context) Result {
 			select {
 			case <-timer.C:
 				t.Logf("timer No.%d up", k)
@@ -342,7 +338,7 @@ func TestParallelLazyStop(t *testing.T) {
 			c = cc
 		}
 
-		c.SetChild(NewBevNode(newBevFunc(func(e *Context) Result {
+		c.SetChild(NewBevNode(newBevFuncParams(func(e *Context) Result {
 			t.Logf("No.%d update", k)
 			ut--
 			if ut <= 0 {
@@ -368,7 +364,7 @@ func TestRepeater(t *testing.T) {
 	key := "counter"
 	test.e.SetInt(key, 0)
 
-	repeater.SetChild(NewBevNode(newBevFunc((func(e *Context) Result {
+	repeater.SetChild(NewBevNode(newBevFuncParams((func(e *Context) Result {
 		e.IncInt(key)
 		return RSuccess
 	}))))
@@ -383,7 +379,7 @@ func TestInverter(t *testing.T) {
 
 	test.tree.Root().SetChild(inverter)
 
-	inverter.SetChild(NewBevNode(newBevFunc(func(e *Context) Result {
+	inverter.SetChild(NewBevNode(newBevFuncParams(func(e *Context) Result {
 		return RFailure
 	})))
 
@@ -396,7 +392,7 @@ func TestSucceeder(t *testing.T) {
 	succeeder := NewSucceederNode()
 	test.tree.Root().SetChild(succeeder)
 
-	succeeder.SetChild(NewBevNode(newBevFunc(func(e *Context) Result { return RFailure })))
+	succeeder.SetChild(NewBevNode(newBevFuncParams(func(e *Context) Result { return RFailure })))
 
 	test.run(t, RSuccess, nil, 1)
 }
@@ -408,7 +404,7 @@ func TestRepeatUntilFail(t *testing.T) {
 	test.tree.Root().SetChild(repeat)
 
 	n := 4
-	repeat.SetChild(NewBevNode(newBevFunc(func(e *Context) Result {
+	repeat.SetChild(NewBevNode(newBevFuncParams(func(e *Context) Result {
 		t.Log("decr 1")
 
 		n--
@@ -443,7 +439,7 @@ func TestShareTree(t *testing.T) {
 		singleSum += limited
 		t.Logf("singleSum add %d to %d", limited, singleSum)
 
-		paral.AddChild(NewBevNode(newBehaviorIncr(key, limited)))
+		paral.AddChild(NewBevNode(newBehaviorIncrParams(key, limited)))
 	}
 
 	envs := make([]*Context, numEnvs)
@@ -507,7 +503,7 @@ func TestReset(t *testing.T) {
 			c = cc
 		}
 
-		c.SetChild(NewBevNode(newBehaviorUpdate(ut)))
+		c.SetChild(NewBevNode(newBehaviorUpdateParams(ut)))
 	}
 
 	e := NewContext(nil)
@@ -530,7 +526,7 @@ func TestRemoveChild(t *testing.T) {
 	paral := NewParallelNode()
 	tree.Root().SetChild(paral)
 
-	bd := newBevBBIncr(key, unit)
+	bd := newBevBBIncrParams(key, unit)
 
 	sc := NewSucceederNode()
 	sc.SetChild(NewBevNode(bd))

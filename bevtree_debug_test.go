@@ -33,7 +33,7 @@ func TestPool(t *testing.T) {
 			c = cc
 		}
 
-		c.SetChild(NewBevNode(newBehaviorUpdate(ut)))
+		c.SetChild(NewBevNode(newBehaviorUpdateParams(ut)))
 	}
 
 	test.run(t, RFailure, nil, 50)
@@ -73,7 +73,7 @@ func TestDebugReset(t *testing.T) {
 			c = cc
 		}
 
-		c.SetChild(NewBevNode(newBehaviorUpdate(ut)))
+		c.SetChild(NewBevNode(newBehaviorUpdateParams(ut)))
 	}
 
 	e := NewContext(nil)
@@ -117,7 +117,7 @@ func TestEnvFinalize(t *testing.T) {
 			c = cc
 		}
 
-		c.SetChild(NewBevNode(newBehaviorUpdate(ut)))
+		c.SetChild(NewBevNode(newBehaviorUpdateParams(ut)))
 	}
 
 	for i := 0; i < 100; i++ {

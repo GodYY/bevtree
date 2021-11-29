@@ -1,44 +1,52 @@
 package bevtree
 
 import (
-	"encoding/xml"
 	"math/rand"
 	"testing"
 	"time"
 )
 
-type bevBBIncr struct {
-	key     string
-	limited int
-	count   int
+type bevBBInccParams struct {
+	Key     string
+	Limited int
 }
 
-func newBevBBIncr(key string, limited int) *bevBBIncr {
-	return &bevBBIncr{
-		key:     key,
-		limited: limited,
+func newBevBBIncrParams(key string, limited int) *bevBBInccParams {
+	return &bevBBInccParams{
+		Key:     key,
+		Limited: limited,
 	}
 }
 
-var btBBIncr = RegisterBevType("blackboardIncr", func() Bev {
-	return &bevBBIncr{}
-})
+func (bevBBInccParams) BevType() BevType { return btBBIncr }
+
+type bevBBIncr struct {
+	*bevBBInccParams
+	count int
+}
+
+var btBBIncr = RegisterBevType("blackboardIncr",
+	func() Bev {
+		return &bevBBIncr{}
+	},
+	func() BevParams {
+		return &bevBBInccParams{}
+	},
+)
 
 func (b *bevBBIncr) BevType() BevType { return btBBIncr }
-func (b *bevBBIncr) OnCreate(template Bev) {
-	tmpl := template.(*bevBBIncr)
-	b.key = tmpl.key
-	b.limited = tmpl.limited
+func (b *bevBBIncr) OnCreate(desc BevParams) {
+	b.bevBBInccParams = desc.(*bevBBInccParams)
 	b.count = 0
 }
 func (b *bevBBIncr) OnDestroy()             {}
 func (b *bevBBIncr) OnInit(_ *Context) bool { return true }
 
 func (b *bevBBIncr) OnUpdate(e *Context) Result {
-	e.IncInt(b.key)
+	e.IncInt(b.Key)
 	b.count++
 
-	if b.count >= b.limited {
+	if b.count >= b.Limited {
 		return RSuccess
 	} else {
 		return RRunning
@@ -47,37 +55,6 @@ func (b *bevBBIncr) OnUpdate(e *Context) Result {
 }
 
 func (b *bevBBIncr) OnTerminate(_ *Context) {}
-
-func (b *bevBBIncr) Clone() Bev {
-	copy := *b
-	return &copy
-}
-
-func (b *bevBBIncr) Destroy() {}
-
-func (b *bevBBIncr) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
-	var err error
-
-	if err = e.EncodeElement(b.key, xml.StartElement{Name: createXMLName("key")}); err != nil {
-		return err
-	}
-
-	return e.EncodeElement(b.limited, xml.StartElement{Name: createXMLName("limited")})
-}
-
-func (b *bevBBIncr) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
-	return d.DecodeEndTo(start.End(), func(d *XMLDecoder, start xml.StartElement) error {
-		if start.Name == createXMLName("key") {
-			return d.DecodeElement(&b.key, start)
-		}
-
-		if start.Name == createXMLName("limited") {
-			return d.DecodeElement(&b.limited, start)
-		}
-
-		return nil
-	})
-}
 
 var xmlNameKey = createXMLName("key")
 
@@ -93,7 +70,7 @@ func TestBevTreeMarshalXML(t *testing.T) {
 	paral := NewParallelNode()
 	tree.Root().SetChild(paral)
 
-	bd := newBevBBIncr(key, unit)
+	bd := newBevBBIncrParams(key, unit)
 
 	sc := NewSucceederNode()
 	sc.SetChild(NewBevNode(bd))

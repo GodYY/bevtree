@@ -1,38 +1,41 @@
 package bevtree
 
 import (
-	"encoding/xml"
-
 	"github.com/GodYY/gutils/assert"
 )
 
 type BevType int32
 
+type BevParams interface {
+	BevType() BevType
+}
+
 type Bev interface {
 	BevType() BevType
-	OnCreate(template Bev)
+	OnCreate(BevParams)
 	OnDestroy()
 	OnInit(*Context) bool
 	OnUpdate(*Context) Result
 	OnTerminate(*Context)
-	MarshalBTXML(*XMLEncoder, xml.StartElement) error
-	UnmarshalBTXML(*XMLDecoder, xml.StartElement) error
 }
 
 type bevMETA struct {
-	name    string
-	typ     BevType
-	creator func() Bev
-	bevPool *pool
+	name          string
+	typ           BevType
+	bevCreator    func() Bev
+	paramsCreator func() BevParams
+	bevPool       *pool
 }
 
-func (meta *bevMETA) createTemplate() Bev {
-	return meta.creator()
+func (meta *bevMETA) createParams() BevParams {
+	return meta.paramsCreator()
 }
 
-func (meta *bevMETA) createBev(template Bev) Bev {
+func (meta *bevMETA) createBev(params BevParams) Bev {
 	b := meta.bevPool.get().(Bev)
-	b.OnCreate(template)
+	if b != nil {
+		b.OnCreate(params)
+	}
 	return b
 }
 
@@ -46,17 +49,19 @@ var bevType2META = map[BevType]*bevMETA{}
 
 func getBevMETAByType(bevType BevType) *bevMETA { return bevType2META[bevType] }
 
-func RegisterBevType(name string, creator func() Bev) BevType {
+func RegisterBevType(name string, bevCreator func() Bev, paramsCreator func() BevParams) BevType {
 	assert.NotEqual(name, "", "invalid name")
-	assert.Assert(creator != nil, "creator nil")
+	assert.Assert(bevCreator != nil, "bevCreator nil")
+	assert.Assert(paramsCreator != nil, "paramsCreator nil")
 
 	assert.AssertF(bevName2META[name] == nil, "bev type \"%s\" already registered", name)
 
 	meta := &bevMETA{
-		name:    name,
-		typ:     BevType(len(bevName2META)),
-		creator: creator,
-		bevPool: newPool(func() interface{} { return creator() }),
+		name:          name,
+		typ:           BevType(len(bevName2META)),
+		bevCreator:    bevCreator,
+		paramsCreator: paramsCreator,
+		bevPool:       newPool(func() interface{} { return bevCreator() }),
 	}
 
 	bevName2META[name] = meta
@@ -69,9 +74,14 @@ func (t BevType) String() string { return bevType2META[t].name }
 
 func chekcBevTyps() {
 	for _, v := range bevName2META {
-		bev := v.createTemplate()
-		assert.AssertF(bev != nil, "bev type \"%s\" create nil bev", v.name)
-		assert.AssertF(bev.BevType() == v.typ, "bev created of type \"%s\" has different type", v.name)
+		params := v.createParams()
+		assert.AssertF(params != nil, "bev type \"%s\" create nil BevParams", v.name)
+		assert.AssertF(params.BevType() == v.typ, "BevParams created of type \"%s\" has different type", v.name)
+
+		bev := v.createBev(params)
+		assert.AssertF(bev != nil, "bev type \"%s\" create nil Bev", v.name)
+		assert.AssertF(bev.BevType() == v.typ, "Bev created of type \"%s\" has different type", v.name)
+		v.destroyBev(bev)
 	}
 }
 
@@ -81,7 +91,7 @@ func init() {
 
 type BevNode struct {
 	node
-	bev Bev
+	bevParams BevParams
 }
 
 func newBevNode() *BevNode {
@@ -90,11 +100,11 @@ func newBevNode() *BevNode {
 	}
 }
 
-func NewBevNode(bev Bev) *BevNode {
-	assert.Assert(bev != nil, "bev nil")
+func NewBevNode(bevParams BevParams) *BevNode {
+	assert.Assert(bevParams != nil, "bevParams nil")
 
 	b := newBevNode()
-	b.bev = bev
+	b.bevParams = bevParams
 	return b
 }
 
@@ -108,8 +118,8 @@ func (b *bevTask) TaskType() TaskType { return TaskSingle }
 
 func (b *bevTask) OnCreate(node Node) {
 	bevNode := node.(*BevNode)
-	if bevNode.bev != nil {
-		b.bev = getBevMETAByType(bevNode.bev.BevType()).createBev(bevNode.bev)
+	if bevNode.bevParams != nil {
+		b.bev = getBevMETAByType(bevNode.bevParams.BevType()).createBev(bevNode.bevParams)
 	}
 }
 
