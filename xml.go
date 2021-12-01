@@ -25,6 +25,9 @@ const (
 	// xml name for BevTree.
 	XMLStringBevTree = "bevtree"
 
+	// xml name for name.
+	XMLStringName = "name"
+
 	// xml name for comment.
 	XMLStringComment = "comment"
 
@@ -455,7 +458,7 @@ func MarshalXMLBevTree(t *BevTree) ([]byte, error) {
 	e.Indent("", "    ")
 
 	start := xml.StartElement{Name: XMLName(XMLStringBevTree)}
-	if err := e.EncodeElementSE(t, start); err != nil {
+	if err := e.EncodeElement(t, start); err != nil {
 		return nil, err
 	}
 
@@ -498,7 +501,7 @@ func EncodeBevTreeXMLFile(path string, t *BevTree) (err error) {
 	enc := NewXMLEncoder(file)
 
 	start := xml.StartElement{Name: XMLName(XMLStringBevTree)}
-	if err := enc.EncodeElementSE(t, start); err != nil {
+	if err := enc.EncodeElement(t, start); err != nil {
 		return err
 	}
 
@@ -528,9 +531,23 @@ func (t *BevTree) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 		log.Printf("BevTree.MarshalBTXML start:%v", start)
 	}
 
-	rootStart := xml.StartElement{Name: XMLName(XMLStringRoot)}
-	if err := e.EncodeElementSE(t.root, rootStart); err != nil {
-		return errors.WithMessagef(err, "BevTree Marshal root")
+	if t.name != "" {
+		start.Attr = append(start.Attr, xml.Attr{Name: XMLName(XMLStringName), Value: t.name})
+	}
+
+	if t.comment != "" {
+		start.Attr = append(start.Attr, xml.Attr{Name: XMLName(XMLStringComment), Value: t.comment})
+	}
+
+	if err := e.EncodeSE(start, func(x *XMLEncoder) error {
+		rootStart := xml.StartElement{Name: XMLName(XMLStringRoot)}
+		if err := e.EncodeElementSE(t.root, rootStart); err != nil {
+			return errors.WithMessagef(err, "Marshal root")
+		}
+
+		return nil
+	}); err != nil {
+		return errors.WithMessagef(err, "BevTree %s Marshal", XMLTokenToString(start))
 	}
 
 	return nil
@@ -541,9 +558,17 @@ func (t *BevTree) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 		log.Printf("BevTree.UnmarshalBTXML start:%v", start)
 	}
 
+	for _, attr := range start.Attr {
+		if attr.Name == XMLName(XMLStringName) {
+			t.name = attr.Value
+		} else if attr.Name == XMLName(XMLStringComment) {
+			t.comment = attr.Value
+		}
+	}
+
 	root := newRootNode()
 	if err := d.DecodeElementAt(root, XMLName(XMLStringRoot)); err != nil {
-		return errors.WithMessage(err, "BevTree Unmarshal root")
+		return errors.WithMessagef(err, "BevTree %s Unmarshal root", XMLTokenToString(start))
 	}
 
 	t.root = root
@@ -617,7 +642,7 @@ func (i *InverterNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error
 	if err := e.EncodeSE(start, func(e *XMLEncoder) error {
 		return i.decoratorNode.marshalXML(e)
 	}); err != nil {
-		return errors.WithMessage(err, "InverterNode Marshal")
+		return errors.WithMessagef(err, "InverterNode %s Marshal", XMLTokenToString(start))
 	}
 
 	return nil
@@ -629,7 +654,7 @@ func (i *InverterNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) err
 	}
 
 	if err := i.decoratorNode.unmarshalXML(d, start); err != nil {
-		return errors.WithMessagef(err, "InverterNode Unmarshal %s", XMLTokenToString(start))
+		return errors.WithMessagef(err, "InverterNode %s Unmarshal", XMLTokenToString(start))
 	}
 
 	if i.child != nil {
@@ -647,7 +672,7 @@ func (s *SucceederNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) erro
 	if err := e.EncodeSE(start, func(e *XMLEncoder) error {
 		return s.decoratorNode.marshalXML(e)
 	}); err != nil {
-		return errors.WithMessage(err, "SucceederNode Marshal")
+		return errors.WithMessagef(err, "SucceederNode %s Marshal", XMLTokenToString(start))
 	}
 
 	return nil
@@ -659,7 +684,7 @@ func (s *SucceederNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) er
 	}
 
 	if err := s.decoratorNode.unmarshalXML(d, start); err != nil {
-		return errors.WithMessagef(err, "SucceederNode Unmarshal %s", XMLTokenToString(start))
+		return errors.WithMessagef(err, "SucceederNode %s Unmarshal", XMLTokenToString(start))
 	}
 
 	if s.child != nil {
@@ -674,19 +699,19 @@ func (r *RepeaterNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error
 		log.Printf("RepeaterNode.MarshalBTXML start:%v", start)
 	}
 
-	return e.EncodeSE(start, func(e *XMLEncoder) error {
+	if err := e.EncodeSE(start, func(e *XMLEncoder) error {
 
 		if err := e.EncodeElement(r.limited, xml.StartElement{Name: XMLName(XMLStringLimited)}); err != nil {
-			return errors.WithMessage(err, "RepeaterNode Marshal limited")
+			return errors.WithMessage(err, "Marshal limited")
 		}
 
-		if err := r.decoratorNode.marshalXML(e); err != nil {
-			return errors.WithMessage(err, "RepeaterNode Marshal")
-		}
+		return r.decoratorNode.marshalXML(e)
 
-		return nil
+	}); err != nil {
+		return errors.WithMessagef(err, "RepeaterNode %s Marshal", XMLTokenToString(start))
+	}
 
-	})
+	return nil
 }
 
 func (r *RepeaterNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
@@ -695,11 +720,11 @@ func (r *RepeaterNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) err
 	}
 
 	if err := d.DecodeElementAt(&r.limited, XMLName(XMLStringLimited)); err != nil {
-		return errors.WithMessagef(err, "RepeaterNode Unmarshal %s limited", XMLTokenToString(start))
+		return errors.WithMessagef(err, "RepeaterNode %s Unmarshal limited", XMLTokenToString(start))
 	}
 
 	if err := r.decoratorNode.unmarshalXML(d, start); err != nil {
-		return errors.WithMessagef(err, "RepeaterNode Unmarshal %s", XMLTokenToString(start))
+		return errors.WithMessagef(err, "RepeaterNode %s Unmarshal", XMLTokenToString(start))
 	}
 
 	if r.child != nil {
@@ -714,19 +739,19 @@ func (r *RepeatUntilFailNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement
 		log.Printf("RepeatUntilFailNode.MarshalBTXML start:%v", start)
 	}
 
-	return e.EncodeSE(start, func(e *XMLEncoder) error {
+	if err := e.EncodeSE(start, func(e *XMLEncoder) error {
 
 		if err := e.EncodeElement(r.successOnFail, xml.StartElement{Name: XMLName(XMLStringSuccessOnFail)}); err != nil {
-			return errors.WithMessagef(err, "RepeatUntilFailNode Marshal successOnFail")
+			return errors.WithMessage(err, "Marshal successOnFail")
 		}
 
-		if err := r.decoratorNode.marshalXML(e); err != nil {
-			return errors.WithMessage(err, "RepeatUntilFailNode Marshal")
-		}
+		return r.decoratorNode.marshalXML(e)
 
-		return nil
+	}); err != nil {
+		return errors.WithMessagef(err, "RepeatUntilFailNode %s Marshal", XMLTokenToString(start))
+	}
 
-	})
+	return nil
 }
 
 func (r *RepeatUntilFailNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
@@ -735,11 +760,11 @@ func (r *RepeatUntilFailNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartEleme
 	}
 
 	if err := d.DecodeElementAt(&r.successOnFail, XMLName(XMLStringSuccessOnFail)); err != nil {
-		return errors.WithMessagef(err, "RepeatUntilFailNode Unmarshal %s successOnFail", XMLTokenToString(start))
+		return errors.WithMessagef(err, "RepeatUntilFailNode %s Unmarshal successOnFail", XMLTokenToString(start))
 	}
 
 	if err := r.decoratorNode.unmarshalXML(d, start); err != nil {
-		return errors.WithMessagef(err, "RepeatUntilFailNode Unmarshal %s", XMLTokenToString(start))
+		return errors.WithMessagef(err, "RepeatUntilFailNode %s Unmarshal", XMLTokenToString(start))
 	}
 
 	if r.child != nil {
@@ -843,7 +868,7 @@ func (s *SequenceNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error
 	if err := e.EncodeSE(start, func(e *XMLEncoder) error {
 		return s.compositeNode.marshalXML(e)
 	}); err != nil {
-		return errors.WithMessage(err, "SequenceNode Marshal")
+		return errors.WithMessagef(err, "SequenceNode %s Marshal", XMLTokenToString(start))
 	}
 
 	return nil
@@ -855,7 +880,7 @@ func (s *SequenceNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) err
 	}
 
 	if err := s.compositeNode.unmarshalXML(d, start); err != nil {
-		return errors.WithMessagef(err, "SequenceNode Unmarshal %s", XMLTokenToString(start))
+		return errors.WithMessagef(err, "SequenceNode %s Unmarshal", XMLTokenToString(start))
 	}
 
 	for _, v := range s.childs {
@@ -873,7 +898,7 @@ func (s *SelectorNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error
 	if err := e.EncodeSE(start, func(e *XMLEncoder) error {
 		return s.compositeNode.marshalXML(e)
 	}); err != nil {
-		return errors.WithMessage(err, "SelectorNode Marshal")
+		return errors.WithMessagef(err, "SelectorNode %s Marshal", XMLTokenToString(start))
 	}
 
 	return nil
@@ -885,7 +910,7 @@ func (s *SelectorNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) err
 	}
 
 	if err := s.compositeNode.unmarshalXML(d, start); err != nil {
-		return errors.WithMessagef(err, "SelectorNode Unmarshal %s", XMLTokenToString(start))
+		return errors.WithMessagef(err, "SelectorNode %s Unmarshal", XMLTokenToString(start))
 	}
 
 	for _, v := range s.childs {
@@ -903,7 +928,7 @@ func (r *RandSequenceNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) e
 	if err := e.EncodeSE(start, func(e *XMLEncoder) error {
 		return r.compositeNode.marshalXML(e)
 	}); err != nil {
-		return errors.WithMessage(err, "RandSequenceNode Marshal")
+		return errors.WithMessagef(err, "RandSequenceNode %s Marshal", XMLTokenToString(start))
 	}
 
 	return nil
@@ -915,7 +940,7 @@ func (r *RandSequenceNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement)
 	}
 
 	if err := r.compositeNode.unmarshalXML(d, start); err != nil {
-		return errors.WithMessagef(err, "RandSequenceNode Unmarshal %s", XMLTokenToString(start))
+		return errors.WithMessagef(err, "RandSequenceNode %s Unmarshal", XMLTokenToString(start))
 	}
 
 	for _, v := range r.childs {
@@ -933,7 +958,7 @@ func (r *RandSelectorNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) e
 	if err := e.EncodeSE(start, func(e *XMLEncoder) error {
 		return r.compositeNode.marshalXML(e)
 	}); err != nil {
-		return errors.WithMessage(err, "RandSelectorNode Marshal")
+		return errors.WithMessagef(err, "RandSelectorNode %s Marshal", XMLTokenToString(start))
 	}
 
 	return nil
@@ -945,7 +970,7 @@ func (r *RandSelectorNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement)
 	}
 
 	if err := r.compositeNode.unmarshalXML(d, start); err != nil {
-		return errors.WithMessagef(err, "RandSelectorNode Unmarshal %s", XMLTokenToString(start))
+		return errors.WithMessagef(err, "RandSelectorNode %s Unmarshal", XMLTokenToString(start))
 	}
 
 	for _, v := range r.childs {
@@ -963,7 +988,7 @@ func (p *ParallelNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error
 	if err := e.EncodeSE(start, func(e *XMLEncoder) error {
 		return p.compositeNode.marshalXML(e)
 	}); err != nil {
-		return errors.WithMessage(err, "ParallelNode Marshal")
+		return errors.WithMessagef(err, "ParallelNode %s Marshal", XMLTokenToString(start))
 	}
 
 	return nil
@@ -975,7 +1000,7 @@ func (p *ParallelNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) err
 	}
 
 	if err := p.compositeNode.unmarshalXML(d, start); err != nil {
-		return errors.WithMessagef(err, "ParallelNode Unmarshal %s", XMLTokenToString(start))
+		return errors.WithMessagef(err, "ParallelNode %s Unmarshal", XMLTokenToString(start))
 	}
 
 	for _, v := range p.childs {
@@ -1006,7 +1031,7 @@ func (b *BevNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 	var err error
 	var bevTypeAttr xml.Attr
 	if bevTypeAttr, err = b.bevParams.BevType().MarshalXMLAttr(XMLName(XMLStringBevType)); err != nil {
-		return errors.WithMessage(err, "BevNode Marshal")
+		return errors.WithMessagef(err, "BevNode %s Marshal", XMLTokenToString(start))
 	}
 
 	start.Attr = append(start.Attr, bevTypeAttr)
@@ -1019,7 +1044,7 @@ func (b *BevNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 	}
 
 	if err != nil {
-		return errors.WithMessage(err, "BevNode Marshal")
+		return errors.WithMessagef(err, "BevNode %s Marshal", XMLTokenToString(start))
 	}
 
 	return nil
@@ -1037,7 +1062,7 @@ func (b *BevNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 		if attr.Name == xmlNameBevType {
 			var bevType BevType
 			if err := bevType.UnmarshalXMLAttr(attr); err != nil {
-				return errors.WithMessagef(err, "BevNode Unmarshal %s", XMLTokenToString(start))
+				return errors.WithMessagef(err, "BevNode %s Unmarshal", XMLTokenToString(start))
 			} else {
 				bevParams = getBevMETAByType(bevType).createParams()
 				break
@@ -1046,11 +1071,11 @@ func (b *BevNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 	}
 
 	if bevParams == nil {
-		return errors.WithMessagef(XMLAttrNotFoundError(xmlNameBevType), "BevNode Unmarshal %s", XMLTokenToString(start))
+		return errors.WithMessagef(XMLAttrNotFoundError(xmlNameBevType), "BevNode %s Unmarshal", XMLTokenToString(start))
 	}
 
 	if err := d.DecodeElement(bevParams, start); err != nil {
-		return errors.WithMessagef(err, "BevNode Unmarshal %s", XMLTokenToString(start))
+		return errors.WithMessagef(err, "BevNode %s Unmarshal", XMLTokenToString(start))
 	}
 
 	b.bevParams = bevParams

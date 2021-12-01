@@ -552,7 +552,9 @@ func (r *rootTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Co
 }
 
 type BevTree struct {
-	root *rootNode
+	name    string
+	comment string
+	root    *rootNode
 }
 
 func NewBevTree() *BevTree {
@@ -561,6 +563,11 @@ func NewBevTree() *BevTree {
 	}
 	return tree
 }
+
+func (t *BevTree) Name() string              { return t.name }
+func (t *BevTree) SetName(name string)       { t.name = name }
+func (t *BevTree) Comment() string           { return t.comment }
+func (t *BevTree) SetComment(comment string) { t.comment = comment }
 
 func (t *BevTree) Root() *rootNode { return t.root }
 

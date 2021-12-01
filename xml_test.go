@@ -67,6 +67,8 @@ func TestBevTreeMarshalXML(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 
 	tree := NewBevTree()
+	tree.SetName("XML测试")
+	tree.SetComment("用于XML测试的行为树")
 	paral := NewParallelNode()
 	paral.SetComment("并行测试")
 	tree.Root().SetChild(paral)
