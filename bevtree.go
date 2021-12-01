@@ -101,10 +101,13 @@ type Node interface {
 	NodeType() NodeType
 	Parent() Node
 	SetParent(Node)
+	Comment() string
+	SetComment(string)
 }
 
 type node struct {
-	parent Node
+	parent  Node
+	comment string
 }
 
 func newNode() node {
@@ -116,6 +119,9 @@ func (n *node) Parent() Node { return n.parent }
 func (n *node) SetParent(parent Node) {
 	n.parent = parent
 }
+
+func (n *node) Comment() string           { return n.comment }
+func (n *node) SetComment(comment string) { n.comment = comment }
 
 type status int8
 
@@ -504,6 +510,8 @@ func newRootNode() *rootNode {
 func (rootNode) NodeType() NodeType { return root }
 func (rootNode) Parent() Node       { return nil }
 func (rootNode) SetParent(Node)     {}
+func (rootNode) Comment() string    { return "" }
+func (rootNode) SetComment(string)  {}
 func (r *rootNode) Child() Node     { return r.child }
 
 func (r *rootNode) SetChild(child Node) {
