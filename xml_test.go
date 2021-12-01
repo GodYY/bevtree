@@ -47,9 +47,9 @@ func (b *bevBBIncr) OnUpdate(e *Context) Result {
 	b.count++
 
 	if b.count >= b.Limited {
-		return RSuccess
+		return Success
 	} else {
-		return RRunning
+		return Running
 	}
 
 }

@@ -74,7 +74,7 @@ type sequenceTask struct {
 	curChildIdx int
 }
 
-func (s *sequenceTask) TaskType() TaskType { return TaskSerial }
+func (s *sequenceTask) TaskType() TaskType { return Serial }
 
 func (s *sequenceTask) OnCreate(node Node) {
 	s.node = node.(*SequenceNode)
@@ -92,14 +92,14 @@ func (s *sequenceTask) OnInit(nextList *NodeList, ctx *Context) bool {
 	return true
 }
 
-func (s *sequenceTask) OnUpdate(ctx *Context) Result { return RRunning }
+func (s *sequenceTask) OnUpdate(ctx *Context) Result { return Running }
 func (s *sequenceTask) OnTerminate(ctx *Context)     {}
 
 func (s *sequenceTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
 	s.curChildIdx++
-	if result == RSuccess && s.curChildIdx < s.node.ChildCount() {
+	if result == Success && s.curChildIdx < s.node.ChildCount() {
 		nextNodes.Push(s.node.Child(s.curChildIdx))
-		return RRunning
+		return Running
 	} else {
 		return result
 	}
@@ -128,7 +128,7 @@ type selectorTask struct {
 	curChildIdx int
 }
 
-func (s *selectorTask) TaskType() TaskType { return TaskSerial }
+func (s *selectorTask) TaskType() TaskType { return Serial }
 
 func (s *selectorTask) OnCreate(node Node) {
 	s.node = node.(*SelectorNode)
@@ -146,14 +146,14 @@ func (s *selectorTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
 	}
 }
 
-func (s *selectorTask) OnUpdate(ctx *Context) Result { return RRunning }
+func (s *selectorTask) OnUpdate(ctx *Context) Result { return Running }
 func (s *selectorTask) OnTerminate(ctx *Context)     {}
 
 func (s *selectorTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
 	s.curChildIdx++
-	if result == RFailure && s.curChildIdx < s.node.ChildCount() {
+	if result == Failure && s.curChildIdx < s.node.ChildCount() {
 		nextNodes.Push(s.node.Child(s.curChildIdx))
-		return RRunning
+		return Running
 	} else {
 		return result
 	}
@@ -212,7 +212,7 @@ type randSequenceTask struct {
 	curChildIdx int
 }
 
-func (s *randSequenceTask) TaskType() TaskType { return TaskSerial }
+func (s *randSequenceTask) TaskType() TaskType { return Serial }
 
 func (s *randSequenceTask) OnCreate(node Node) {
 	s.node = node.(*RandSequenceNode)
@@ -233,15 +233,15 @@ func (s *randSequenceTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
 	}
 }
 
-func (s *randSequenceTask) OnUpdate(ctx *Context) Result { return RRunning }
+func (s *randSequenceTask) OnUpdate(ctx *Context) Result { return Running }
 func (s *randSequenceTask) OnTerminate(ctx *Context)     {}
 
 func (s *randSequenceTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
 	s.curChildIdx++
 
-	if result == RSuccess && s.curChildIdx < s.node.ChildCount() {
+	if result == Success && s.curChildIdx < s.node.ChildCount() {
 		nextNodes.Push(s.childs[s.curChildIdx])
-		return RRunning
+		return Running
 	} else {
 		return result
 	}
@@ -271,7 +271,7 @@ type randSelectorTask struct {
 	curChildIdx int
 }
 
-func (s *randSelectorTask) TaskType() TaskType { return TaskSerial }
+func (s *randSelectorTask) TaskType() TaskType { return Serial }
 
 func (s *randSelectorTask) OnCreate(node Node) {
 	s.node = node.(*RandSelectorNode)
@@ -293,15 +293,15 @@ func (s *randSelectorTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
 	}
 }
 
-func (s *randSelectorTask) OnUpdate(ctx *Context) Result { return RRunning }
+func (s *randSelectorTask) OnUpdate(ctx *Context) Result { return Running }
 func (s *randSelectorTask) OnTerminate(ctx *Context)     {}
 
 func (s *randSelectorTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
 	s.curChildIdx++
 
-	if result == RFailure && s.curChildIdx < s.node.ChildCount() {
+	if result == Failure && s.curChildIdx < s.node.ChildCount() {
 		nextNodes.Push(s.childs[s.curChildIdx])
-		return RRunning
+		return Running
 	} else {
 		return result
 	}
@@ -330,7 +330,7 @@ type parallelTask struct {
 	completed int
 }
 
-func (p *parallelTask) TaskType() TaskType { return TaskParallel }
+func (p *parallelTask) TaskType() TaskType { return Parallel }
 
 func (p *parallelTask) OnCreate(node Node) {
 	p.node = node.(*ParallelNode)
@@ -351,13 +351,13 @@ func (p *parallelTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
 	}
 }
 
-func (p *parallelTask) OnUpdate(ctx *Context) Result { return RRunning }
+func (p *parallelTask) OnUpdate(ctx *Context) Result { return Running }
 func (p *parallelTask) OnTerminate(ctx *Context)     { p.completed = 0 }
 func (p *parallelTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
 	p.completed++
 
-	if result == RSuccess && p.completed < p.node.ChildCount() {
-		return RRunning
+	if result == Success && p.completed < p.node.ChildCount() {
+		return Running
 	} else {
 		return result
 	}

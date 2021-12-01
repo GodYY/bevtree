@@ -36,7 +36,7 @@ func TestPool(t *testing.T) {
 		c.SetChild(NewBevNode(newBehaviorUpdateParams(ut)))
 	}
 
-	test.run(t, RFailure, nil, 50)
+	test.run(t, Failure, nil, 50)
 	test.close()
 
 	getTotal := _poolDebug.getTotal()

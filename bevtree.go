@@ -162,15 +162,15 @@ func (l lazyStop) String() string { return lazyStopStrings[l] }
 type Result int8
 
 const (
-	RSuccess = Result(iota)
-	RFailure
-	RRunning
+	Success = Result(iota)
+	Failure
+	Running
 )
 
 var resultStrings = [...]string{
-	RSuccess: "success",
-	RFailure: "failure",
-	RRunning: "running",
+	Success: "success",
+	Failure: "failure",
+	Running: "running",
 }
 
 func (r Result) String() string { return resultStrings[r] }
@@ -178,15 +178,15 @@ func (r Result) String() string { return resultStrings[r] }
 type TaskType int8
 
 const (
-	TaskSingle = TaskType(iota)
-	TaskSerial
-	TaskParallel
+	Single = TaskType(iota)
+	Serial
+	Parallel
 )
 
 var taskTypeStrings = [...]string{
-	TaskSingle:   "single",
-	TaskSerial:   "serial",
-	TaskParallel: "parallel",
+	Single:   "single",
+	Serial:   "serial",
+	Parallel: "parallel",
 }
 
 func (tt TaskType) String() string { return taskTypeStrings[tt] }
@@ -226,7 +226,7 @@ func (a *agent) onDestroy() {
 	a.task = nil
 }
 
-func (a *agent) isPersistent() bool { return a.task.TaskType() == TaskSingle }
+func (a *agent) isPersistent() bool { return a.task.TaskType() == Single }
 
 func (a *agent) getNext() *agent {
 	if a.parent != nil && a.next != a.parent.firstChild {
@@ -311,18 +311,18 @@ func (a *agent) update(ctx *Context) Result {
 		if !a.task.OnInit(ctx.getNodeList(), ctx) {
 			a.task.OnTerminate(ctx)
 			a.setStatus(sTerminated)
-			return RFailure
+			return Failure
 		}
 
 		if debug {
 			switch a.task.TaskType() {
-			case TaskSingle:
+			case Single:
 				assert.AssertF(ctx.getNodeList().Len() == 0, "node type \"%s\" has children", a.node.NodeType().String())
 
-			case TaskSerial:
+			case Serial:
 				assert.AssertF(ctx.getNodeList().Len() == 1, "node type \"%s\" have no or more than one child", a.node.NodeType().String())
 
-			case TaskParallel:
+			case Parallel:
 				assert.AssertF(ctx.getNodeList().Len() > 0, "node type \"%s\" have no children", a.node.NodeType().String())
 			}
 		}
@@ -338,7 +338,7 @@ func (a *agent) update(ctx *Context) Result {
 		return a.doLazyStop(ctx)
 	}
 
-	if result == RRunning {
+	if result == Running {
 		a.setStatus(sRunning)
 	} else {
 		// terminate.
@@ -405,7 +405,7 @@ func (a *agent) doLazyStop(ctx *Context) Result {
 	a.task.OnTerminate(ctx)
 	a.setStatus(sStopped)
 	a.setLZStop(lzsNone)
-	return RFailure
+	return Failure
 }
 
 func (a *agent) lazyStopChildren(ctx *Context) {
@@ -421,28 +421,28 @@ func (a *agent) lazyStopChildren(ctx *Context) {
 func (a *agent) onChildTerminated(child *agent, result Result, ctx *Context) Result {
 	if debug {
 		log.Printf("agent nodetype:%v onChildTerminated %v", a.node.NodeType(), result)
-		assert.Assert(a.task.TaskType() != TaskSingle, "shouldnt be singletask")
+		assert.Assert(a.task.TaskType() != Single, "shouldnt be singletask")
 		assert.Assert(child.getParent() == a, "invalid child")
-		assert.NotEqual(result, RRunning, "child terminated with running")
+		assert.NotEqual(result, Running, "child terminated with running")
 	}
 
 	a.removeChild(child)
 
 	if a.getStatus() != sRunning {
-		return RFailure
+		return Failure
 	}
 
 	if a.getLZStop() != lzsNone {
-		return RRunning
+		return Running
 	}
 
-	if result = a.task.OnChildTerminated(result, ctx.getNodeList(), ctx); result == RRunning {
+	if result = a.task.OnChildTerminated(result, ctx.getNodeList(), ctx); result == Running {
 		if debug {
 			switch a.task.TaskType() {
-			case TaskSerial:
+			case Serial:
 				assert.AssertF(ctx.getNodeList().Len() == 1, "node type \"%s\" has no or more than one next child", a.node.NodeType().String())
 
-			case TaskParallel:
+			case Parallel:
 				assert.AssertF(ctx.getNodeList().Len() == 0, "node type \"%s\" has next children", a.node.NodeType().String())
 			}
 		}
@@ -472,7 +472,7 @@ func createAgent(node Node) *agent {
 
 	task := nodeMETA.createTask(node)
 	switch task.TaskType() {
-	case TaskSingle, TaskSerial, TaskParallel:
+	case Single, Serial, Parallel:
 	default:
 		panic(fmt.Sprintf("node type \"%s\" create invalid type %d task", node.NodeType().String(), task.TaskType()))
 	}
@@ -532,7 +532,7 @@ type rootTask struct {
 	node *rootNode
 }
 
-func (r *rootTask) TaskType() TaskType { return TaskSerial }
+func (r *rootTask) TaskType() TaskType { return Serial }
 func (r *rootTask) OnCreate(node Node) { r.node = node.(*rootNode) }
 func (r *rootTask) OnDestroy()         { r.node = nil }
 
@@ -545,7 +545,7 @@ func (r *rootTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
 	}
 }
 
-func (r *rootTask) OnUpdate(ctx *Context) Result { return RRunning }
+func (r *rootTask) OnUpdate(ctx *Context) Result { return Running }
 func (r *rootTask) OnTerminate(ctx *Context)     {}
 func (r *rootTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
 	return result
@@ -582,7 +582,7 @@ func (t *BevTree) Update(ctx *Context) Result {
 
 	ctx.update()
 
-	result := RRunning
+	result := Running
 	for agent := ctx.popCurrentAgent(); agent != nil; agent = ctx.popCurrentAgent() {
 		r := agent.update(ctx)
 		st := agent.getStatus()
@@ -598,7 +598,7 @@ func (t *BevTree) Update(ctx *Context) Result {
 				parentTerminated := parent.getStatus() != sRunning
 
 				r = parent.onChildTerminated(agent, r, ctx)
-				if parentTerminated || r == RRunning {
+				if parentTerminated || r == Running {
 					terminated = false
 					break
 				}
@@ -612,8 +612,8 @@ func (t *BevTree) Update(ctx *Context) Result {
 			destroyAgent(agent)
 
 			if terminated {
-				assert.Equal(result, RRunning, "Update terminated reapeatedly")
-				assert.NotEqual(r, RRunning, "Update terminated with RRunning")
+				assert.Equal(result, Running, "Update terminated reapeatedly")
+				assert.NotEqual(r, Running, "Update terminated with RRunning")
 
 				result = r
 			}
@@ -622,7 +622,7 @@ func (t *BevTree) Update(ctx *Context) Result {
 		}
 	}
 
-	assert.Assert(result == RRunning || ctx.noAgents(), "Update terminated but already has agents")
+	assert.Assert(result == Running || ctx.noAgents(), "Update terminated but already has agents")
 
 	return result
 }

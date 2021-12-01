@@ -71,16 +71,16 @@ func (b *behaviorIncr) OnInit(e *Context) bool { return true }
 
 func (b *behaviorIncr) OnUpdate(e *Context) Result {
 	if b.count >= b.limited {
-		return RFailure
+		return Failure
 	}
 
 	b.count++
 	e.IncInt(b.key)
 	if b.count >= b.limited {
-		return RSuccess
+		return Success
 	}
 
-	return RRunning
+	return Running
 }
 
 func (b *behaviorIncr) OnTerminate(e *Context) { b.count = 0 }
@@ -113,15 +113,15 @@ func (b *behaviorUpdate) OnInit(e *Context) bool { return true }
 
 func (b *behaviorUpdate) OnUpdate(e *Context) Result {
 	if b.count >= b.limited {
-		return RSuccess
+		return Success
 	}
 
 	b.count++
 	if b.count >= b.limited {
-		return RSuccess
+		return Success
 	}
 
-	return RRunning
+	return Running
 }
 
 func (b *behaviorUpdate) OnTerminate(e *Context) { b.count = 0 }
@@ -141,13 +141,13 @@ func newTest() *test {
 }
 
 func (t *test) run(tt *testing.T, expectedResult Result, expectedKeyValues map[string]interface{}, tick int) {
-	result := RRunning
+	result := Running
 
 	for i := 0; i < tick; i++ {
 		tt.Log("run", i, "start")
-		result = RRunning
+		result = Running
 		k := 0
-		for result == RRunning {
+		for result == Running {
 			tt.Log("run", i, "update", k)
 			k++
 			result = t.tree.Update(t.e)
@@ -179,7 +179,7 @@ func (t *test) close() {
 
 func TestRoot(t *testing.T) {
 	test := newTest()
-	test.run(t, RFailure, nil, 1)
+	test.run(t, Failure, nil, 1)
 }
 
 func TestSequence(t *testing.T) {
@@ -195,11 +195,11 @@ func TestSequence(t *testing.T) {
 	for i := 0; i < n; i++ {
 		seq.AddChild(NewBevNode(newBevFuncParams(func(e *Context) Result {
 			e.IncInt(key)
-			return RSuccess
+			return Success
 		})))
 	}
 
-	test.run(t, RSuccess, map[string]interface{}{key: n}, 1)
+	test.run(t, Success, map[string]interface{}{key: n}, 1)
 }
 
 func TestSelector(t *testing.T) {
@@ -217,9 +217,9 @@ func TestSelector(t *testing.T) {
 		selc.AddChild(NewBevNode(newBevFuncParams((func(e *Context) Result {
 			if k == selected {
 				test.e.SetInt(key, selected)
-				return RSuccess
+				return Success
 			} else {
-				return RFailure
+				return Failure
 			}
 		}))))
 	}
@@ -227,7 +227,7 @@ func TestSelector(t *testing.T) {
 	rand.Seed(time.Now().Unix())
 	selected = rand.Intn(n)
 
-	test.run(t, RSuccess, map[string]interface{}{key: selected}, 1)
+	test.run(t, Success, map[string]interface{}{key: selected}, 1)
 }
 
 func TestRandomSequence(t *testing.T) {
@@ -247,11 +247,11 @@ func TestRandomSequence(t *testing.T) {
 		seq.AddChild(NewBevNode(newBevFuncParams(func(e *Context) Result {
 			t.Log("seq", k, "update")
 			e.IncInt(key)
-			return RSuccess
+			return Success
 		})))
 	}
 
-	test.run(t, RSuccess, map[string]interface{}{key: n}, 1)
+	test.run(t, Success, map[string]interface{}{key: n}, 1)
 }
 
 func TestRandomSelector(t *testing.T) {
@@ -272,9 +272,9 @@ func TestRandomSelector(t *testing.T) {
 			t.Log("seq", k, "update")
 			if k == selected {
 				test.e.SetInt(key, selected)
-				return RSuccess
+				return Success
 			} else {
-				return RFailure
+				return Failure
 			}
 		}))))
 	}
@@ -282,7 +282,7 @@ func TestRandomSelector(t *testing.T) {
 	rand.Seed(time.Now().Unix())
 	selected = rand.Intn(n)
 
-	test.run(t, RSuccess, map[string]interface{}{key: selected}, 1)
+	test.run(t, Success, map[string]interface{}{key: selected}, 1)
 }
 
 func TestParallel(t *testing.T) {
@@ -302,15 +302,15 @@ func TestParallel(t *testing.T) {
 			select {
 			case <-timer.C:
 				t.Logf("timer No.%d up", k)
-				return RSuccess
+				return Success
 			default:
 				t.Logf("timer No.%d update", k)
-				return RRunning
+				return Running
 			}
 		})))
 	}
 
-	test.run(t, RSuccess, nil, 1)
+	test.run(t, Success, nil, 1)
 }
 
 func TestParallelLazyStop(t *testing.T) {
@@ -343,14 +343,14 @@ func TestParallelLazyStop(t *testing.T) {
 			ut--
 			if ut <= 0 {
 				t.Logf("No.%d over", k)
-				return RSuccess
+				return Success
 			} else {
-				return RRunning
+				return Running
 			}
 		})))
 	}
 
-	test.run(t, RFailure, nil, 1)
+	test.run(t, Failure, nil, 1)
 }
 
 func TestRepeater(t *testing.T) {
@@ -366,10 +366,10 @@ func TestRepeater(t *testing.T) {
 
 	repeater.SetChild(NewBevNode(newBevFuncParams((func(e *Context) Result {
 		e.IncInt(key)
-		return RSuccess
+		return Success
 	}))))
 
-	test.run(t, RSuccess, map[string]interface{}{key: n}, 1)
+	test.run(t, Success, map[string]interface{}{key: n}, 1)
 }
 
 func TestInverter(t *testing.T) {
@@ -380,10 +380,10 @@ func TestInverter(t *testing.T) {
 	test.tree.Root().SetChild(inverter)
 
 	inverter.SetChild(NewBevNode(newBevFuncParams(func(e *Context) Result {
-		return RFailure
+		return Failure
 	})))
 
-	test.run(t, RSuccess, nil, 1)
+	test.run(t, Success, nil, 1)
 }
 
 func TestSucceeder(t *testing.T) {
@@ -392,9 +392,9 @@ func TestSucceeder(t *testing.T) {
 	succeeder := NewSucceederNode()
 	test.tree.Root().SetChild(succeeder)
 
-	succeeder.SetChild(NewBevNode(newBevFuncParams(func(e *Context) Result { return RFailure })))
+	succeeder.SetChild(NewBevNode(newBevFuncParams(func(e *Context) Result { return Failure })))
 
-	test.run(t, RSuccess, nil, 1)
+	test.run(t, Success, nil, 1)
 }
 
 func TestRepeatUntilFail(t *testing.T) {
@@ -410,13 +410,13 @@ func TestRepeatUntilFail(t *testing.T) {
 		n--
 
 		if n <= 0 {
-			return RFailure
+			return Failure
 		}
 
-		return RSuccess
+		return Success
 	})))
 
-	test.run(t, RFailure, nil, 1)
+	test.run(t, Failure, nil, 1)
 }
 
 func TestShareTree(t *testing.T) {
@@ -425,7 +425,7 @@ func TestShareTree(t *testing.T) {
 	paral := NewParallelNode()
 	tree.Root().SetChild(paral)
 
-	expectedResult := RSuccess
+	expectedResult := Success
 	singleSum := 0
 	key := "sum"
 	numEnvs := 100
@@ -448,8 +448,8 @@ func TestShareTree(t *testing.T) {
 		envs[i].SetInt(key, 0)
 	}
 
-	result := RRunning
-	for result == RRunning {
+	result := Running
+	for result == Running {
 		for i := 0; i < numEnvs; i++ {
 			if i > 0 {
 				r := tree.Update(envs[i])
@@ -587,7 +587,7 @@ func TestRemoveChild(t *testing.T) {
 	}
 
 	context := NewContext(nil)
-	if tree.Update(context) != RFailure {
+	if tree.Update(context) != Failure {
 		t.FailNow()
 	}
 }

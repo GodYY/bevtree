@@ -114,7 +114,7 @@ type bevTask struct {
 	bev Bev
 }
 
-func (b *bevTask) TaskType() TaskType { return TaskSingle }
+func (b *bevTask) TaskType() TaskType { return Single }
 
 func (b *bevTask) OnCreate(node Node) {
 	bevNode := node.(*BevNode)
@@ -140,7 +140,7 @@ func (b *bevTask) OnInit(_ *NodeList, ctx *Context) bool {
 
 func (b *bevTask) OnUpdate(ctx *Context) Result {
 	if b.bev == nil {
-		return RFailure
+		return Failure
 	} else {
 		return b.bev.OnUpdate(ctx)
 	}
