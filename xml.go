@@ -499,6 +499,7 @@ func EncodeBevTreeXMLFile(path string, t *BevTree) (err error) {
 	}()
 
 	enc := NewXMLEncoder(file)
+	enc.Indent("", "    ")
 
 	start := xml.StartElement{Name: XMLName(XMLStringBevTree)}
 	if err := enc.EncodeElement(t, start); err != nil {
