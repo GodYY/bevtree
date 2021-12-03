@@ -31,7 +31,7 @@ func (c *compositeNode) Child(idx int) Node {
 	return c.childs[idx]
 }
 
-func (c *compositeNode) AddChild(child Node) bool {
+func (c *compositeNode) addChild(child Node) bool {
 	if child == nil || child.Parent() != nil {
 		return false
 	}
@@ -64,7 +64,7 @@ func NewSequenceNode() *SequenceNode {
 func (s *SequenceNode) NodeType() NodeType { return sequence }
 
 func (s *SequenceNode) AddChild(child Node) {
-	if s.compositeNode.AddChild(child) {
+	if s.compositeNode.addChild(child) {
 		child.SetParent(s)
 	}
 }
@@ -118,7 +118,7 @@ func NewSelectorNode() *SelectorNode {
 func (s *SelectorNode) NodeType() NodeType { return selector }
 
 func (s *SelectorNode) AddChild(child Node) {
-	if s.compositeNode.AddChild(child) {
+	if s.compositeNode.addChild(child) {
 		child.SetParent(s)
 	}
 }
@@ -201,7 +201,7 @@ func NewRandSequenceNode() *RandSequenceNode {
 func (s *RandSequenceNode) NodeType() NodeType { return randSequence }
 
 func (s *RandSequenceNode) AddChild(child Node) {
-	if s.compositeNode.AddChild(child) {
+	if s.compositeNode.addChild(child) {
 		child.SetParent(s)
 	}
 }
@@ -260,7 +260,7 @@ func NewRandSelectorNode() *RandSelectorNode {
 func (s *RandSelectorNode) NodeType() NodeType { return randSelector }
 
 func (s *RandSelectorNode) AddChild(child Node) {
-	if s.compositeNode.AddChild(child) {
+	if s.compositeNode.addChild(child) {
 		child.SetParent(s)
 	}
 }
@@ -320,7 +320,7 @@ func NewParallelNode() *ParallelNode {
 func (p *ParallelNode) NodeType() NodeType { return parallel }
 
 func (p *ParallelNode) AddChild(child Node) {
-	if p.compositeNode.AddChild(child) {
+	if p.compositeNode.addChild(child) {
 		child.SetParent(p)
 	}
 }

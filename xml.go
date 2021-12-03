@@ -629,7 +629,7 @@ func (d *decoratorNode) unmarshalXML(dec *XMLDecoder, start xml.StartElement) er
 	}
 
 	if child != nil {
-		d.SetChild(child)
+		d.setChild(child)
 	}
 
 	return nil
@@ -1029,23 +1029,24 @@ func (b *BevNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 		log.Printf("BevNode.MarshalBTXML start:%v", start)
 	}
 
-	var err error
-	var bevTypeAttr xml.Attr
-	if bevTypeAttr, err = b.bevParams.BevType().MarshalXMLAttr(XMLName(XMLStringBevType)); err != nil {
-		return errors.WithMessagef(err, "BevNode %s Marshal", XMLTokenToString(start))
-	}
+	if b.bevParams != nil {
+		var err error
+		var bevTypeAttr xml.Attr
+		if bevTypeAttr, err = b.bevParams.BevType().MarshalXMLAttr(XMLName(XMLStringBevType)); err == nil {
+			start.Attr = append(start.Attr, bevTypeAttr)
 
-	start.Attr = append(start.Attr, bevTypeAttr)
+			switch o := b.bevParams.(type) {
+			case XMLMarshaler:
+				err = o.MarshalBTXML(e, start)
+			default:
+				err = e.Encoder.EncodeElement(b.bevParams, start)
+			}
 
-	switch o := b.bevParams.(type) {
-	case XMLMarshaler:
-		err = o.MarshalBTXML(e, start)
-	default:
-		err = e.Encoder.EncodeElement(b.bevParams, start)
-	}
+		}
 
-	if err != nil {
-		return errors.WithMessagef(err, "BevNode %s Marshal", XMLTokenToString(start))
+		if err != nil {
+			return errors.WithMessagef(err, "BevNode %s Marshal", XMLTokenToString(start))
+		}
 	}
 
 	return nil
@@ -1056,29 +1057,28 @@ func (b *BevNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 		log.Printf("BevNode.UnmarshalBTXML start:%v", start)
 	}
 
+	var err error
 	var bevParams BevParams
 
 	xmlNameBevType := XMLName(XMLStringBevType)
 	for _, attr := range start.Attr {
 		if attr.Name == xmlNameBevType {
 			var bevType BevType
-			if err := bevType.UnmarshalXMLAttr(attr); err != nil {
-				return errors.WithMessagef(err, "BevNode %s Unmarshal", XMLTokenToString(start))
-			} else {
+			if err = bevType.UnmarshalXMLAttr(attr); err == nil {
 				bevParams = getBevMETAByType(bevType).createParams()
-				break
+				err = d.DecodeElement(bevParams, start)
 			}
+
+			break
 		}
 	}
 
-	if bevParams == nil {
-		return errors.WithMessagef(XMLAttrNotFoundError(xmlNameBevType), "BevNode %s Unmarshal", XMLTokenToString(start))
+	if err != nil {
+		return errors.WithMessagef(err, "BevNode %s Unmarshal", start)
+	} else if bevParams != nil {
+		b.bevParams = bevParams
+		return nil
+	} else {
+		return d.Skip()
 	}
-
-	if err := d.DecodeElement(bevParams, start); err != nil {
-		return errors.WithMessagef(err, "BevNode %s Unmarshal", XMLTokenToString(start))
-	}
-
-	b.bevParams = bevParams
-	return nil
 }

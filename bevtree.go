@@ -72,14 +72,14 @@ var (
 	root            = RegisterNodeType("root", func() Node { return newRootNode() }, func() Task { return &rootTask{} })
 	inverter        = RegisterNodeType("inverter", func() Node { return NewInverterNode() }, func() Task { return &inverterTask{} })
 	succeeder       = RegisterNodeType("succeeder", func() Node { return NewSucceederNode() }, func() Task { return &succeederTask{} })
-	repeater        = RegisterNodeType("repeater", func() Node { return newRepeaterNode() }, func() Task { return &repeaterTask{} })
-	repeatUntilFail = RegisterNodeType("repeatuntilfail", func() Node { return NewRepeatUntilFailNode(true) }, func() Task { return &repeatUntilFailTask{} })
+	repeater        = RegisterNodeType("repeater", func() Node { return NewRepeaterNode(1) }, func() Task { return &repeaterTask{} })
+	repeatUntilFail = RegisterNodeType("repeatuntilfail", func() Node { return NewRepeatUntilFailNode(false) }, func() Task { return &repeatUntilFailTask{} })
 	sequence        = RegisterNodeType("sequence", func() Node { return NewSequenceNode() }, func() Task { return &sequenceTask{} })
 	selector        = RegisterNodeType("selector", func() Node { return NewSelectorNode() }, func() Task { return &selectorTask{} })
 	randSequence    = RegisterNodeType("randsequence", func() Node { return NewRandSequenceNode() }, func() Task { return &randSequenceTask{} })
 	randSelector    = RegisterNodeType("randselector", func() Node { return NewRandSelectorNode() }, func() Task { return &randSelectorTask{} })
 	parallel        = RegisterNodeType("parallel", func() Node { return NewParallelNode() }, func() Task { return &parallelTask{} })
-	behavior        = RegisterNodeType("behavior", func() Node { return newBevNode() }, func() Task { return &bevTask{} })
+	behavior        = RegisterNodeType("behavior", func() Node { return NewBevNode(nil) }, func() Task { return &bevTask{} })
 )
 
 func checkNodeTypes() {

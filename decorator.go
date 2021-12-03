@@ -1,8 +1,6 @@
 package bevtree
 
-import (
-	"github.com/GodYY/gutils/assert"
-)
+import "github.com/GodYY/gutils/assert"
 
 type DecoratorNode interface {
 	Node
@@ -23,7 +21,7 @@ func newDecoratorNode() decoratorNode {
 
 func (d *decoratorNode) Child() Node { return d.child }
 
-func (d *decoratorNode) SetChild(child Node) bool {
+func (d *decoratorNode) setChild(child Node) bool {
 	if child == nil || child.Parent() != nil {
 		return false
 	}
@@ -48,7 +46,7 @@ func NewInverterNode() *InverterNode {
 func (i *InverterNode) NodeType() NodeType { return inverter }
 
 func (i *InverterNode) SetChild(child Node) {
-	if i.decoratorNode.SetChild(child) {
+	if i.decoratorNode.setChild(child) {
 		child.SetParent(i)
 	}
 }
@@ -92,7 +90,7 @@ func NewSucceederNode() *SucceederNode {
 func (s *SucceederNode) NodeType() NodeType { return succeeder }
 
 func (s *SucceederNode) SetChild(child Node) {
-	if s.decoratorNode.SetChild(child) {
+	if s.decoratorNode.setChild(child) {
 		child.SetParent(s)
 	}
 }
@@ -126,26 +124,29 @@ type RepeaterNode struct {
 	limited int
 }
 
-func newRepeaterNode() *RepeaterNode {
-	return &RepeaterNode{
-		decoratorNode: newDecoratorNode(),
-	}
-}
-
 func NewRepeaterNode(limited int) *RepeaterNode {
 	assert.Assert(limited > 0, "invalid limited")
-
-	r := newRepeaterNode()
-	r.limited = limited
-	return r
+	return &RepeaterNode{
+		decoratorNode: newDecoratorNode(),
+		limited:       limited,
+	}
 }
 
 func (r *RepeaterNode) NodeType() NodeType { return repeater }
 
 func (r *RepeaterNode) SetChild(child Node) {
-	if r.decoratorNode.SetChild(child) {
+	if r.decoratorNode.setChild(child) {
 		child.SetParent(r)
 	}
+}
+
+func (r *RepeaterNode) Limited() int { return r.limited }
+
+func (r *RepeaterNode) SetLimited(limited int) {
+	if r.limited <= 0 {
+		return
+	}
+	r.limited = limited
 }
 
 type repeaterTask struct {
@@ -194,10 +195,13 @@ func NewRepeatUntilFailNode(successOnFail bool) *RepeatUntilFailNode {
 func (r *RepeatUntilFailNode) NodeType() NodeType { return repeatUntilFail }
 
 func (r *RepeatUntilFailNode) SetChild(child Node) {
-	if r.decoratorNode.SetChild(child) {
+	if r.decoratorNode.setChild(child) {
 		child.SetParent(r)
 	}
 }
+
+func (r *RepeatUntilFailNode) SuccessOnFail() bool                 { return r.successOnFail }
+func (r *RepeatUntilFailNode) SetSuccessOnFail(successOnFail bool) { r.successOnFail = successOnFail }
 
 type repeatUntilFailTask struct {
 	node *RepeatUntilFailNode

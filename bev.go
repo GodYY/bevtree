@@ -94,21 +94,17 @@ type BevNode struct {
 	bevParams BevParams
 }
 
-func newBevNode() *BevNode {
+func NewBevNode(bevParams BevParams) *BevNode {
 	return &BevNode{
-		node: newNode(),
+		node:      newNode(),
+		bevParams: bevParams,
 	}
 }
 
-func NewBevNode(bevParams BevParams) *BevNode {
-	assert.Assert(bevParams != nil, "bevParams nil")
-
-	b := newBevNode()
-	b.bevParams = bevParams
-	return b
-}
-
 func (BevNode) NodeType() NodeType { return behavior }
+
+func (b *BevNode) BevParams() BevParams             { return b.bevParams }
+func (b *BevNode) SetBevParams(bevParams BevParams) { b.bevParams = bevParams }
 
 type bevTask struct {
 	bev Bev
@@ -118,8 +114,9 @@ func (b *bevTask) TaskType() TaskType { return Single }
 
 func (b *bevTask) OnCreate(node Node) {
 	bevNode := node.(*BevNode)
-	if bevNode.bevParams != nil {
-		b.bev = getBevMETAByType(bevNode.bevParams.BevType()).createBev(bevNode.bevParams)
+	bevParams := bevNode.BevParams()
+	if bevParams != nil {
+		b.bev = getBevMETAByType(bevParams.BevType()).createBev(bevParams)
 	}
 }
 
