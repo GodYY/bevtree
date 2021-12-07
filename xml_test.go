@@ -39,11 +39,11 @@ func (b *bevBBIncr) OnCreate(desc BevParams) {
 	b.bevBBInccParams = desc.(*bevBBInccParams)
 	b.count = 0
 }
-func (b *bevBBIncr) OnDestroy()             {}
-func (b *bevBBIncr) OnInit(_ *Context) bool { return true }
+func (b *bevBBIncr) OnDestroy()            {}
+func (b *bevBBIncr) OnInit(_ Context) bool { return true }
 
-func (b *bevBBIncr) OnUpdate(e *Context) Result {
-	e.IncInt(b.Key)
+func (b *bevBBIncr) OnUpdate(e Context) Result {
+	e.DataSet().IncInt(b.Key)
 	b.count++
 
 	if b.count >= b.Limited {
@@ -54,7 +54,7 @@ func (b *bevBBIncr) OnUpdate(e *Context) Result {
 
 }
 
-func (b *bevBBIncr) OnTerminate(_ *Context) {}
+func (b *bevBBIncr) OnTerminate(_ Context) {}
 
 var xmlNameKey = XMLName("key")
 
@@ -135,13 +135,14 @@ func TestBevTreeMarshalXML(t *testing.T) {
 	// paral.AddChild(NewRandSelector())
 	// paral.AddChild(NewParallel())
 
-	ctx := NewContext(nil)
-	ctx.Set(key, 0)
-	tree.Update(ctx)
-	v, _ := ctx.GetInt(key)
+	entity := NewEntity(tree, nil)
+	entity.Context().DataSet().Set(key, 0)
+	entity.Update()
+	v, _ := entity.Context().DataSet().GetInt(key)
 	if v != sum {
 		t.Fatalf("test BevTree before marshal: sum(%d) != %d", v, sum)
 	}
+	entity.Release()
 
 	data, err := MarshalXMLBevTree(tree)
 	if err != nil {
@@ -155,10 +156,11 @@ func TestBevTreeMarshalXML(t *testing.T) {
 		t.Fatal("unmarshal previos BevTree:", err)
 	}
 
-	ctx.Set(key, 0)
-	newTree.Update(ctx)
+	entity = NewEntity(newTree, nil)
+	entity.Context().DataSet().Set(key, 0)
+	entity.Update()
 
-	v, _ = ctx.GetInt(key)
+	v, _ = entity.Context().DataSet().GetInt(key)
 	if v != sum {
 		t.Fatalf("test BevTree after unmarshal: sum(%d) != %d", v, sum)
 	}

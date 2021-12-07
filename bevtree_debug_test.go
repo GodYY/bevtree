@@ -76,11 +76,11 @@ func TestDebugReset(t *testing.T) {
 		c.SetChild(NewBevNode(newBehaviorUpdateParams(ut)))
 	}
 
-	e := NewContext(nil)
+	e := NewEntity(tree, nil)
 
 	for i := 0; i < 100; i++ {
-		tree.Update(e)
-		tree.Stop(e)
+		e.Update()
+		e.Stop()
 
 		getTotal := _poolDebug.getTotal()
 		putTotal := _poolDebug.putTotal()
@@ -93,7 +93,7 @@ func TestDebugReset(t *testing.T) {
 	}
 }
 
-func TestEnvFinalize(t *testing.T) {
+func TestEntityFinalizer(t *testing.T) {
 	tree := NewBevTree()
 
 	paral := NewParallelNode()
@@ -121,9 +121,9 @@ func TestEnvFinalize(t *testing.T) {
 	}
 
 	for i := 0; i < 100; i++ {
-		e := NewContext(nil)
-		tree.Update(e)
-		tree.Stop(e)
+		e := NewEntity(tree, nil)
+		e.Update()
+		e.Stop()
 	}
 
 	runtime.GC()

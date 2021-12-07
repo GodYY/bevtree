@@ -24,14 +24,14 @@ type Bev interface {
 	OnDestroy()
 
 	// OnInit is called before the first update of the behavior.
-	OnInit(*Context) bool
+	OnInit(Context) bool
 
 	// OnUpdate is called when the behavior tree update before the
 	// behavior terminate.
-	OnUpdate(*Context) Result
+	OnUpdate(Context) Result
 
 	// OnTerminate is called after the last update of the behavior.
-	OnTerminate(*Context)
+	OnTerminate(Context)
 }
 
 // The metadata of behavior.
@@ -168,7 +168,7 @@ func (b *bevTask) OnDestroy() {
 	}
 }
 
-func (b *bevTask) OnInit(_ *NodeList, ctx *Context) bool {
+func (b *bevTask) OnInit(_ NodeList, ctx Context) bool {
 	if b.bev == nil {
 		return false
 	} else {
@@ -176,7 +176,7 @@ func (b *bevTask) OnInit(_ *NodeList, ctx *Context) bool {
 	}
 }
 
-func (b *bevTask) OnUpdate(ctx *Context) Result {
+func (b *bevTask) OnUpdate(ctx Context) Result {
 	if b.bev == nil {
 		return Failure
 	} else {
@@ -184,10 +184,10 @@ func (b *bevTask) OnUpdate(ctx *Context) Result {
 	}
 }
 
-func (b *bevTask) OnTerminate(ctx *Context) {
+func (b *bevTask) OnTerminate(ctx Context) {
 	if b.bev != nil {
 		b.bev.OnTerminate(ctx)
 	}
 }
 
-func (b *bevTask) OnChildTerminated(Result, *NodeList, *Context) Result { panic("shouldnt be invoked") }
+func (b *bevTask) OnChildTerminated(Result, NodeList, Context) Result { panic("shouldnt be invoked") }

@@ -69,19 +69,19 @@ func (i *inverterTask) TaskType() TaskType { return Serial }
 func (i *inverterTask) OnCreate(node Node) { i.node = node.(*InverterNode) }
 func (i *inverterTask) OnDestroy()         { i.node = nil }
 
-func (i *inverterTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
+func (i *inverterTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	if i.node.Child() == nil {
 		return false
 	} else {
-		nextNodes.Push(i.node.Child())
+		nextChildNodes.PushNode(i.node.Child())
 		return true
 	}
 }
 
-func (i *inverterTask) OnUpdate(ctx *Context) Result { return Running }
-func (i *inverterTask) OnTerminate(ctx *Context)     {}
+func (i *inverterTask) OnUpdate(ctx Context) Result { return Running }
+func (i *inverterTask) OnTerminate(ctx Context)     {}
 
-func (i *inverterTask) OnChildTerminated(result Result, _ *NodeList, ctx *Context) Result {
+func (i *inverterTask) OnChildTerminated(result Result, _ NodeList, ctx Context) Result {
 	if result == Success {
 		return Failure
 	} else {
@@ -115,19 +115,19 @@ func (s *succeederTask) TaskType() TaskType { return Serial }
 func (s *succeederTask) OnCreate(node Node) { s.node = node.(*SucceederNode) }
 func (s *succeederTask) OnDestroy()         { s.node = nil }
 
-func (s *succeederTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
+func (s *succeederTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	if s.node.Child() == nil {
 		return false
 	} else {
-		nextNodes.Push(s.node.Child())
+		nextChildNodes.PushNode(s.node.Child())
 		return true
 	}
 }
 
-func (s *succeederTask) OnUpdate(ctx *Context) Result { return Running }
-func (s *succeederTask) OnTerminate(ctx *Context)     {}
+func (s *succeederTask) OnUpdate(ctx Context) Result { return Running }
+func (s *succeederTask) OnTerminate(ctx Context)     {}
 
-func (s *succeederTask) OnChildTerminated(result Result, _ *NodeList, ctx *Context) Result {
+func (s *succeederTask) OnChildTerminated(result Result, _ NodeList, ctx Context) Result {
 	return Success
 }
 
@@ -173,22 +173,22 @@ func (r *repeaterTask) TaskType() TaskType { return Serial }
 func (r *repeaterTask) OnCreate(node Node) { r.node = node.(*RepeaterNode); r.count = 0 }
 func (r *repeaterTask) OnDestroy()         { r.node = nil }
 
-func (r *repeaterTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
+func (r *repeaterTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	if r.node.Child() == nil {
 		return false
 	} else {
-		nextNodes.Push(r.node.Child())
+		nextChildNodes.PushNode(r.node.Child())
 		return true
 	}
 }
 
-func (r *repeaterTask) OnUpdate(ctx *Context) Result { return Running }
-func (r *repeaterTask) OnTerminate(ctx *Context)     {}
+func (r *repeaterTask) OnUpdate(ctx Context) Result { return Running }
+func (r *repeaterTask) OnTerminate(ctx Context)     {}
 
-func (r *repeaterTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
+func (r *repeaterTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
 	r.count++
 	if result != Failure && r.count < r.node.limited {
-		nextNodes.Push(r.node.Child())
+		nextChildNodes.PushNode(r.node.Child())
 		return Running
 	} else {
 		return result
@@ -230,20 +230,20 @@ func (r *repeatUntilFailTask) TaskType() TaskType { return Serial }
 func (r *repeatUntilFailTask) OnCreate(node Node) { r.node = node.(*RepeatUntilFailNode) }
 func (r *repeatUntilFailTask) OnDestroy()         { r.node = nil }
 
-func (r *repeatUntilFailTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
+func (r *repeatUntilFailTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	if r.node.Child() == nil {
 		return false
 	} else {
-		nextNodes.Push(r.node.Child())
+		nextChildNodes.PushNode(r.node.Child())
 		return true
 	}
 }
-func (r *repeatUntilFailTask) OnUpdate(ctx *Context) Result { return Running }
-func (r *repeatUntilFailTask) OnTerminate(ctx *Context)     {}
+func (r *repeatUntilFailTask) OnUpdate(ctx Context) Result { return Running }
+func (r *repeatUntilFailTask) OnTerminate(ctx Context)     {}
 
-func (r *repeatUntilFailTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
+func (r *repeatUntilFailTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
 	if result == Success {
-		nextNodes.Push(r.node.Child())
+		nextChildNodes.PushNode(r.node.Child())
 		return Running
 	} else if result == Failure && r.node.successOnFail {
 		return Success

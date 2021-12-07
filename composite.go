@@ -100,22 +100,22 @@ func (s *sequenceTask) OnCreate(node Node) {
 
 func (s *sequenceTask) OnDestroy() { s.node = nil }
 
-func (s *sequenceTask) OnInit(childNodes *NodeList, ctx *Context) bool {
+func (s *sequenceTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	if s.node.ChildCount() == 0 {
 		return false
 	}
 
-	childNodes.Push(s.node.Child(0))
+	nextChildNodes.PushNode(s.node.Child(0))
 	return true
 }
 
-func (s *sequenceTask) OnUpdate(ctx *Context) Result { return Running }
-func (s *sequenceTask) OnTerminate(ctx *Context)     {}
+func (s *sequenceTask) OnUpdate(ctx Context) Result { return Running }
+func (s *sequenceTask) OnTerminate(ctx Context)     {}
 
-func (s *sequenceTask) OnChildTerminated(result Result, childNodes *NodeList, ctx *Context) Result {
+func (s *sequenceTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
 	s.curChildIdx++
 	if result == Success && s.curChildIdx < s.node.ChildCount() {
-		childNodes.Push(s.node.Child(s.curChildIdx))
+		nextChildNodes.PushNode(s.node.Child(s.curChildIdx))
 		return Running
 	} else {
 		return result
@@ -158,22 +158,22 @@ func (s *selectorTask) OnCreate(node Node) {
 
 func (s *selectorTask) OnDestroy() { s.node = nil }
 
-func (s *selectorTask) OnInit(childNodes *NodeList, ctx *Context) bool {
+func (s *selectorTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	if s.node.ChildCount() == 0 {
 		return false
 	} else {
-		childNodes.Push(s.node.Child(0))
+		nextChildNodes.PushNode(s.node.Child(0))
 		return true
 	}
 }
 
-func (s *selectorTask) OnUpdate(ctx *Context) Result { return Running }
-func (s *selectorTask) OnTerminate(ctx *Context)     {}
+func (s *selectorTask) OnUpdate(ctx Context) Result { return Running }
+func (s *selectorTask) OnTerminate(ctx Context)     {}
 
-func (s *selectorTask) OnChildTerminated(result Result, childNodes *NodeList, ctx *Context) Result {
+func (s *selectorTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
 	s.curChildIdx++
 	if result == Failure && s.curChildIdx < s.node.ChildCount() {
-		childNodes.Push(s.node.Child(s.curChildIdx))
+		nextChildNodes.PushNode(s.node.Child(s.curChildIdx))
 		return Running
 	} else {
 		return result
@@ -250,23 +250,23 @@ func (s *randSequenceTask) OnDestroy() {
 	s.childs = nil
 }
 
-func (s *randSequenceTask) OnInit(childNodes *NodeList, ctx *Context) bool {
+func (s *randSequenceTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	if s.childs = genRandNodes(s.node.children); len(s.childs) == 0 {
 		return false
 	} else {
-		childNodes.Push(s.childs[s.curChildIdx])
+		nextChildNodes.PushNode(s.childs[s.curChildIdx])
 		return true
 	}
 }
 
-func (s *randSequenceTask) OnUpdate(ctx *Context) Result { return Running }
-func (s *randSequenceTask) OnTerminate(ctx *Context)     {}
+func (s *randSequenceTask) OnUpdate(ctx Context) Result { return Running }
+func (s *randSequenceTask) OnTerminate(ctx Context)     {}
 
-func (s *randSequenceTask) OnChildTerminated(result Result, childNodes *NodeList, ctx *Context) Result {
+func (s *randSequenceTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
 	s.curChildIdx++
 
 	if result == Success && s.curChildIdx < s.node.ChildCount() {
-		childNodes.Push(s.childs[s.curChildIdx])
+		nextChildNodes.PushNode(s.childs[s.curChildIdx])
 		return Running
 	} else {
 		return result
@@ -313,24 +313,24 @@ func (s *randSelectorTask) OnDestroy() {
 	s.childs = nil
 }
 
-func (s *randSelectorTask) OnInit(childNodes *NodeList, ctx *Context) bool {
+func (s *randSelectorTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	s.childs = genRandNodes(s.node.children)
 	if len(s.childs) == 0 {
 		return false
 	} else {
-		childNodes.Push(s.childs[s.curChildIdx])
+		nextChildNodes.PushNode(s.childs[s.curChildIdx])
 		return true
 	}
 }
 
-func (s *randSelectorTask) OnUpdate(ctx *Context) Result { return Running }
-func (s *randSelectorTask) OnTerminate(ctx *Context)     {}
+func (s *randSelectorTask) OnUpdate(ctx Context) Result { return Running }
+func (s *randSelectorTask) OnTerminate(ctx Context)     {}
 
-func (s *randSelectorTask) OnChildTerminated(result Result, childNodes *NodeList, ctx *Context) Result {
+func (s *randSelectorTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
 	s.curChildIdx++
 
 	if result == Failure && s.curChildIdx < s.node.ChildCount() {
-		childNodes.Push(s.childs[s.curChildIdx])
+		nextChildNodes.PushNode(s.childs[s.curChildIdx])
 		return Running
 	} else {
 		return result
@@ -373,21 +373,22 @@ func (p *parallelTask) OnCreate(node Node) {
 
 func (p *parallelTask) OnDestroy() { p.node = nil }
 
-func (p *parallelTask) OnInit(childNodes *NodeList, ctx *Context) bool {
+func (p *parallelTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	childCount := p.node.ChildCount()
 	if childCount == 0 {
 		return false
 	} else {
-		for i := 0; i < childCount; i++ {
-			childNodes.Push(p.node.Child(i))
-		}
+		nextChildNodes.PushNodes(p.node.children...)
+		// for i := 0; i < childCount; i++ {
+		// 	nextChildNodes.PushNode(p.node.Child(i))
+		// }
 		return true
 	}
 }
 
-func (p *parallelTask) OnUpdate(ctx *Context) Result { return Running }
-func (p *parallelTask) OnTerminate(ctx *Context)     { p.completed = 0 }
-func (p *parallelTask) OnChildTerminated(result Result, childNodes *NodeList, ctx *Context) Result {
+func (p *parallelTask) OnUpdate(ctx Context) Result { return Running }
+func (p *parallelTask) OnTerminate(ctx Context)     { p.completed = 0 }
+func (p *parallelTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
 	p.completed++
 
 	if result == Success && p.completed < p.node.ChildCount() {

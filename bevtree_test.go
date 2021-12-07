@@ -13,10 +13,10 @@ var (
 )
 
 type bevFuncParams struct {
-	f func(*Context) Result
+	f func(Context) Result
 }
 
-func newBevFuncParams(f func(*Context) Result) *bevFuncParams {
+func newBevFuncParams(f func(Context) Result) *bevFuncParams {
 	return &bevFuncParams{f: f}
 }
 
@@ -34,14 +34,14 @@ func (b *bevFunc) OnCreate(params BevParams) {
 
 func (b *bevFunc) OnDestroy() {}
 
-func (b *bevFunc) OnInit(e *Context) bool { return true }
+func (b *bevFunc) OnInit(e Context) bool { return true }
 
-func (b *bevFunc) OnUpdate(e *Context) Result {
+func (b *bevFunc) OnUpdate(e Context) Result {
 	// fmt.Println("behaviorFunc OnUpdate")
 	return b.f(e)
 }
 
-func (b *bevFunc) OnTerminate(e *Context) {
+func (b *bevFunc) OnTerminate(e Context) {
 }
 
 type behaviorIncrParams struct {
@@ -67,15 +67,15 @@ func (b *behaviorIncr) OnCreate(params BevParams) {
 }
 func (b *behaviorIncr) OnDestroy() {}
 
-func (b *behaviorIncr) OnInit(e *Context) bool { return true }
+func (b *behaviorIncr) OnInit(e Context) bool { return true }
 
-func (b *behaviorIncr) OnUpdate(e *Context) Result {
+func (b *behaviorIncr) OnUpdate(e Context) Result {
 	if b.count >= b.limited {
 		return Failure
 	}
 
 	b.count++
-	e.IncInt(b.key)
+	e.DataSet().IncInt(b.key)
 	if b.count >= b.limited {
 		return Success
 	}
@@ -83,7 +83,7 @@ func (b *behaviorIncr) OnUpdate(e *Context) Result {
 	return Running
 }
 
-func (b *behaviorIncr) OnTerminate(e *Context) { b.count = 0 }
+func (b *behaviorIncr) OnTerminate(e Context) { b.count = 0 }
 
 type behaviorUpdateParams struct {
 	limited int
@@ -109,9 +109,9 @@ func (b *behaviorUpdate) OnCreate(params BevParams) {
 
 func (b *behaviorUpdate) OnDestroy() {}
 
-func (b *behaviorUpdate) OnInit(e *Context) bool { return true }
+func (b *behaviorUpdate) OnInit(e Context) bool { return true }
 
-func (b *behaviorUpdate) OnUpdate(e *Context) Result {
+func (b *behaviorUpdate) OnUpdate(e Context) Result {
 	if b.count >= b.limited {
 		return Success
 	}
@@ -124,19 +124,17 @@ func (b *behaviorUpdate) OnUpdate(e *Context) Result {
 	return Running
 }
 
-func (b *behaviorUpdate) OnTerminate(e *Context) { b.count = 0 }
+func (b *behaviorUpdate) OnTerminate(e Context) { b.count = 0 }
 
 type test struct {
-	tree *BevTree
-	e    *Context
+	tree   *BevTree
+	entity Entity
 }
 
 func newTest() *test {
-	t := &test{
-		tree: NewBevTree(),
-		e:    NewContext(nil),
-	}
+	t := new(test)
 	t.tree = NewBevTree()
+	t.entity = NewEntity(t.tree, nil)
 	return t
 }
 
@@ -150,7 +148,7 @@ func (t *test) run(tt *testing.T, expectedResult Result, expectedKeyValues map[s
 		for result == Running {
 			tt.Log("run", i, "update", k)
 			k++
-			result = t.tree.Update(t.e)
+			result = t.entity.Update()
 			time.Sleep(1 * time.Millisecond)
 		}
 		tt.Log("run", i, "end", result)
@@ -161,20 +159,22 @@ func (t *test) run(tt *testing.T, expectedResult Result, expectedKeyValues map[s
 	}
 
 	for k, v := range expectedKeyValues {
-		if t.e.Get(k) != v {
-			tt.Fatalf("%s = %v(%v)", k, t.e.Get(k), v)
+		if t.entity.Context().DataSet().Get(k) != v {
+			tt.Fatalf("%s = %v(%v)", k, t.entity.Context().DataSet().Get(k), v)
 		}
 	}
 }
 
 func (t *test) clear() {
 	t.tree = nil
-	t.e = nil
+	t.entity = nil
 }
 
 func (t *test) close() {
+	t.entity.Stop()
+	t.entity.Release()
+	t.entity = nil
 	t.tree = nil
-	t.e.Release()
 }
 
 func TestRoot(t *testing.T) {
@@ -190,11 +190,11 @@ func TestSequence(t *testing.T) {
 	test.tree.Root().SetChild(seq)
 
 	key := "counter"
-	test.e.SetInt(key, 0)
+	test.entity.Context().DataSet().SetInt(key, 0)
 	n := 2
 	for i := 0; i < n; i++ {
-		seq.AddChild(NewBevNode(newBevFuncParams(func(e *Context) Result {
-			e.IncInt(key)
+		seq.AddChild(NewBevNode(newBevFuncParams(func(e Context) Result {
+			e.DataSet().IncInt(key)
 			return Success
 		})))
 	}
@@ -214,9 +214,9 @@ func TestSelector(t *testing.T) {
 	n := 10
 	for i := 0; i < n; i++ {
 		k := i
-		selc.AddChild(NewBevNode(newBevFuncParams((func(e *Context) Result {
+		selc.AddChild(NewBevNode(newBevFuncParams((func(e Context) Result {
 			if k == selected {
-				test.e.SetInt(key, selected)
+				test.entity.Context().DataSet().SetInt(key, selected)
 				return Success
 			} else {
 				return Failure
@@ -240,13 +240,13 @@ func TestRandomSequence(t *testing.T) {
 	test.tree.Root().SetChild(seq)
 
 	key := "counter"
-	test.e.SetInt(key, 0)
+	test.entity.Context().DataSet().SetInt(key, 0)
 	n := 2
 	for i := 0; i < n; i++ {
 		k := i
-		seq.AddChild(NewBevNode(newBevFuncParams(func(e *Context) Result {
+		seq.AddChild(NewBevNode(newBevFuncParams(func(e Context) Result {
 			t.Log("seq", k, "update")
-			e.IncInt(key)
+			e.DataSet().IncInt(key)
 			return Success
 		})))
 	}
@@ -268,10 +268,10 @@ func TestRandomSelector(t *testing.T) {
 	n := 10
 	for i := 0; i < n; i++ {
 		k := i
-		selc.AddChild(NewBevNode(newBevFuncParams((func(e *Context) Result {
+		selc.AddChild(NewBevNode(newBevFuncParams((func(e Context) Result {
 			t.Log("seq", k, "update")
 			if k == selected {
-				test.e.SetInt(key, selected)
+				test.entity.Context().DataSet().SetInt(key, selected)
 				return Success
 			} else {
 				return Failure
@@ -298,7 +298,7 @@ func TestParallel(t *testing.T) {
 	for i := 0; i < n; i++ {
 		k := i + 1
 		timer := time.NewTimer(1000 * time.Millisecond * time.Duration(k))
-		paral.AddChild(NewBevNode(newBevFuncParams(func(e *Context) Result {
+		paral.AddChild(NewBevNode(newBevFuncParams(func(e Context) Result {
 			select {
 			case <-timer.C:
 				t.Logf("timer No.%d up", k)
@@ -338,7 +338,7 @@ func TestParallelLazyStop(t *testing.T) {
 			c = cc
 		}
 
-		c.SetChild(NewBevNode(newBevFuncParams(func(e *Context) Result {
+		c.SetChild(NewBevNode(newBevFuncParams(func(e Context) Result {
 			t.Logf("No.%d update", k)
 			ut--
 			if ut <= 0 {
@@ -362,10 +362,10 @@ func TestRepeater(t *testing.T) {
 	test.tree.Root().SetChild(repeater)
 
 	key := "counter"
-	test.e.SetInt(key, 0)
+	test.entity.Context().DataSet().SetInt(key, 0)
 
-	repeater.SetChild(NewBevNode(newBevFuncParams((func(e *Context) Result {
-		e.IncInt(key)
+	repeater.SetChild(NewBevNode(newBevFuncParams((func(e Context) Result {
+		e.DataSet().IncInt(key)
 		return Success
 	}))))
 
@@ -379,7 +379,7 @@ func TestInverter(t *testing.T) {
 
 	test.tree.Root().SetChild(inverter)
 
-	inverter.SetChild(NewBevNode(newBevFuncParams(func(e *Context) Result {
+	inverter.SetChild(NewBevNode(newBevFuncParams(func(e Context) Result {
 		return Failure
 	})))
 
@@ -392,7 +392,7 @@ func TestSucceeder(t *testing.T) {
 	succeeder := NewSucceederNode()
 	test.tree.Root().SetChild(succeeder)
 
-	succeeder.SetChild(NewBevNode(newBevFuncParams(func(e *Context) Result { return Failure })))
+	succeeder.SetChild(NewBevNode(newBevFuncParams(func(e Context) Result { return Failure })))
 
 	test.run(t, Success, nil, 1)
 }
@@ -404,7 +404,7 @@ func TestRepeatUntilFail(t *testing.T) {
 	test.tree.Root().SetChild(repeat)
 
 	n := 4
-	repeat.SetChild(NewBevNode(newBevFuncParams(func(e *Context) Result {
+	repeat.SetChild(NewBevNode(newBevFuncParams(func(e Context) Result {
 		t.Log("decr 1")
 
 		n--
@@ -428,7 +428,7 @@ func TestShareTree(t *testing.T) {
 	expectedResult := Success
 	singleSum := 0
 	key := "sum"
-	numEnvs := 100
+	numEntities := 100
 	low, max := 5, 50
 	n := 100
 
@@ -442,22 +442,22 @@ func TestShareTree(t *testing.T) {
 		paral.AddChild(NewBevNode(newBehaviorIncrParams(key, limited)))
 	}
 
-	envs := make([]*Context, numEnvs)
-	for i := 0; i < numEnvs; i++ {
-		envs[i] = NewContext(nil)
-		envs[i].SetInt(key, 0)
+	entities := make([]Entity, numEntities)
+	for i := 0; i < numEntities; i++ {
+		entities[i] = NewEntity(tree, nil)
+		entities[i].Context().DataSet().SetInt(key, 0)
 	}
 
 	result := Running
 	for result == Running {
-		for i := 0; i < numEnvs; i++ {
+		for i := 0; i < numEntities; i++ {
 			if i > 0 {
-				r := tree.Update(envs[i])
+				r := entities[i].Update()
 				if r != result {
 					t.Fatal("invalid result", result, r)
 				}
 			} else {
-				result = tree.Update(envs[i])
+				result = entities[i].Update()
 			}
 		}
 
@@ -469,13 +469,13 @@ func TestShareTree(t *testing.T) {
 	}
 
 	sum := 0
-	for i := 0; i < numEnvs; i++ {
-		v, _ := envs[i].GetInt(key)
+	for i := 0; i < numEntities; i++ {
+		v, _ := entities[i].Context().DataSet().GetInt(key)
 		sum += v
 	}
 
-	if sum != singleSum*numEnvs {
-		t.Fatalf("expected sum %d get %d", singleSum*numEnvs, sum)
+	if sum != singleSum*numEntities {
+		t.Fatalf("expected sum %d get %d", singleSum*numEntities, sum)
 	}
 }
 
@@ -506,11 +506,11 @@ func TestReset(t *testing.T) {
 		c.SetChild(NewBevNode(newBehaviorUpdateParams(ut)))
 	}
 
-	e := NewContext(nil)
+	e := NewEntity(tree, nil)
 
 	for i := 0; i < 100; i++ {
-		tree.Update(e)
-		tree.Stop(e)
+		e.Update()
+		e.Stop()
 	}
 }
 
@@ -586,8 +586,8 @@ func TestRemoveChild(t *testing.T) {
 		t.FailNow()
 	}
 
-	context := NewContext(nil)
-	if tree.Update(context) != Failure {
+	entity := NewEntity(tree, nil)
+	if entity.Update() != Failure {
 		t.FailNow()
 	}
 }
