@@ -4,31 +4,44 @@ import (
 	"math/rand"
 )
 
+// The CompositeNode Interface represents the functions that
+// the composite nodes in behavior tree must implement.
 type CompositeNode interface {
 	Node
+
+	// Get the number of child nodes.
 	ChildCount() int
+
+	// Get the child node with index idx.
 	Child(idx int) Node
+
+	// Add a child node.
 	AddChild(child Node)
+
+	// Remove a child node with index idx.
 	RemoveChild(idx int) Node
 }
 
+// The common part of composite node.
 type compositeNode struct {
 	node
-	childs []Node
+
+	// The child nodes.
+	children []Node
 }
 
 func newCompositeNode() compositeNode {
 	return compositeNode{}
 }
 
-func (c *compositeNode) ChildCount() int { return len(c.childs) }
+func (c *compositeNode) ChildCount() int { return len(c.children) }
 
 func (c *compositeNode) Child(idx int) Node {
 	if idx < 0 || idx >= c.ChildCount() {
 		return nil
 	}
 
-	return c.childs[idx]
+	return c.children[idx]
 }
 
 func (c *compositeNode) addChild(child Node) bool {
@@ -36,7 +49,7 @@ func (c *compositeNode) addChild(child Node) bool {
 		return false
 	}
 
-	c.childs = append(c.childs, child)
+	c.children = append(c.children, child)
 	return true
 }
 
@@ -45,12 +58,15 @@ func (c *compositeNode) RemoveChild(idx int) Node {
 		return nil
 	}
 
-	child := c.childs[idx]
+	child := c.children[idx]
 	child.SetParent(nil)
-	c.childs = append(c.childs[:idx], c.childs[idx+1:]...)
+	c.children = append(c.children[:idx], c.children[idx+1:]...)
 	return child
 }
 
+// Sequence node runs child node one bye one until a child
+// returns failure. It returns the result of the last
+// running node.
 type SequenceNode struct {
 	compositeNode
 }
@@ -69,6 +85,7 @@ func (s *SequenceNode) AddChild(child Node) {
 	}
 }
 
+// The sequence node task.
 type sequenceTask struct {
 	node        *SequenceNode
 	curChildIdx int
@@ -83,28 +100,31 @@ func (s *sequenceTask) OnCreate(node Node) {
 
 func (s *sequenceTask) OnDestroy() { s.node = nil }
 
-func (s *sequenceTask) OnInit(nextList *NodeList, ctx *Context) bool {
+func (s *sequenceTask) OnInit(childNodes *NodeList, ctx *Context) bool {
 	if s.node.ChildCount() == 0 {
 		return false
 	}
 
-	nextList.Push(s.node.Child(0))
+	childNodes.Push(s.node.Child(0))
 	return true
 }
 
 func (s *sequenceTask) OnUpdate(ctx *Context) Result { return Running }
 func (s *sequenceTask) OnTerminate(ctx *Context)     {}
 
-func (s *sequenceTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
+func (s *sequenceTask) OnChildTerminated(result Result, childNodes *NodeList, ctx *Context) Result {
 	s.curChildIdx++
 	if result == Success && s.curChildIdx < s.node.ChildCount() {
-		nextNodes.Push(s.node.Child(s.curChildIdx))
+		childNodes.Push(s.node.Child(s.curChildIdx))
 		return Running
 	} else {
 		return result
 	}
 }
 
+// Selector node runs child node one by one until a child
+// returns success. It returns the result of the last
+// running node.
 type SelectorNode struct {
 	compositeNode
 }
@@ -123,6 +143,7 @@ func (s *SelectorNode) AddChild(child Node) {
 	}
 }
 
+// The selector node task.
 type selectorTask struct {
 	node        *SelectorNode
 	curChildIdx int
@@ -137,11 +158,11 @@ func (s *selectorTask) OnCreate(node Node) {
 
 func (s *selectorTask) OnDestroy() { s.node = nil }
 
-func (s *selectorTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
+func (s *selectorTask) OnInit(childNodes *NodeList, ctx *Context) bool {
 	if s.node.ChildCount() == 0 {
 		return false
 	} else {
-		nextNodes.Push(s.node.Child(0))
+		childNodes.Push(s.node.Child(0))
 		return true
 	}
 }
@@ -149,16 +170,17 @@ func (s *selectorTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
 func (s *selectorTask) OnUpdate(ctx *Context) Result { return Running }
 func (s *selectorTask) OnTerminate(ctx *Context)     {}
 
-func (s *selectorTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
+func (s *selectorTask) OnChildTerminated(result Result, childNodes *NodeList, ctx *Context) Result {
 	s.curChildIdx++
 	if result == Failure && s.curChildIdx < s.node.ChildCount() {
-		nextNodes.Push(s.node.Child(s.curChildIdx))
+		childNodes.Push(s.node.Child(s.curChildIdx))
 		return Running
 	} else {
 		return result
 	}
 }
 
+// Get a random sequence of nodes.
 func genRandNodes(nodes []Node) []Node {
 	count := len(nodes)
 	if count == 0 {
@@ -188,6 +210,9 @@ func genRandNodes(nodes []Node) []Node {
 	return result
 }
 
+// Random sequence runs child nodes one by one in a
+// random sequence until a child returns failure. It
+// returns the result of the last running node.
 type RandSequenceNode struct {
 	compositeNode
 }
@@ -206,6 +231,7 @@ func (s *RandSequenceNode) AddChild(child Node) {
 	}
 }
 
+// The randome sequence node task.
 type randSequenceTask struct {
 	node        *RandSequenceNode
 	childs      []Node
@@ -224,11 +250,11 @@ func (s *randSequenceTask) OnDestroy() {
 	s.childs = nil
 }
 
-func (s *randSequenceTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
-	if s.childs = genRandNodes(s.node.childs); len(s.childs) == 0 {
+func (s *randSequenceTask) OnInit(childNodes *NodeList, ctx *Context) bool {
+	if s.childs = genRandNodes(s.node.children); len(s.childs) == 0 {
 		return false
 	} else {
-		nextNodes.Push(s.childs[s.curChildIdx])
+		childNodes.Push(s.childs[s.curChildIdx])
 		return true
 	}
 }
@@ -236,17 +262,20 @@ func (s *randSequenceTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
 func (s *randSequenceTask) OnUpdate(ctx *Context) Result { return Running }
 func (s *randSequenceTask) OnTerminate(ctx *Context)     {}
 
-func (s *randSequenceTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
+func (s *randSequenceTask) OnChildTerminated(result Result, childNodes *NodeList, ctx *Context) Result {
 	s.curChildIdx++
 
 	if result == Success && s.curChildIdx < s.node.ChildCount() {
-		nextNodes.Push(s.childs[s.curChildIdx])
+		childNodes.Push(s.childs[s.curChildIdx])
 		return Running
 	} else {
 		return result
 	}
 }
 
+// Random selector node runs child nodes one by one in a
+// random sequence until a child returns success. It returns
+// the result of the last running node.
 type RandSelectorNode struct {
 	compositeNode
 }
@@ -265,6 +294,7 @@ func (s *RandSelectorNode) AddChild(child Node) {
 	}
 }
 
+// The random selector task.
 type randSelectorTask struct {
 	node        *RandSelectorNode
 	childs      []Node
@@ -283,12 +313,12 @@ func (s *randSelectorTask) OnDestroy() {
 	s.childs = nil
 }
 
-func (s *randSelectorTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
-	s.childs = genRandNodes(s.node.childs)
+func (s *randSelectorTask) OnInit(childNodes *NodeList, ctx *Context) bool {
+	s.childs = genRandNodes(s.node.children)
 	if len(s.childs) == 0 {
 		return false
 	} else {
-		nextNodes.Push(s.childs[s.curChildIdx])
+		childNodes.Push(s.childs[s.curChildIdx])
 		return true
 	}
 }
@@ -296,17 +326,20 @@ func (s *randSelectorTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
 func (s *randSelectorTask) OnUpdate(ctx *Context) Result { return Running }
 func (s *randSelectorTask) OnTerminate(ctx *Context)     {}
 
-func (s *randSelectorTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
+func (s *randSelectorTask) OnChildTerminated(result Result, childNodes *NodeList, ctx *Context) Result {
 	s.curChildIdx++
 
 	if result == Failure && s.curChildIdx < s.node.ChildCount() {
-		nextNodes.Push(s.childs[s.curChildIdx])
+		childNodes.Push(s.childs[s.curChildIdx])
 		return Running
 	} else {
 		return result
 	}
 }
 
+// The parrallel node runs child nodes together until a
+// child returns failure. It returns success if all child
+// nodes return success, or returns failure.
 type ParallelNode struct {
 	compositeNode
 }
@@ -325,6 +358,7 @@ func (p *ParallelNode) AddChild(child Node) {
 	}
 }
 
+// The parallel node task.
 type parallelTask struct {
 	node      *ParallelNode
 	completed int
@@ -339,13 +373,13 @@ func (p *parallelTask) OnCreate(node Node) {
 
 func (p *parallelTask) OnDestroy() { p.node = nil }
 
-func (p *parallelTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
+func (p *parallelTask) OnInit(childNodes *NodeList, ctx *Context) bool {
 	childCount := p.node.ChildCount()
 	if childCount == 0 {
 		return false
 	} else {
 		for i := 0; i < childCount; i++ {
-			nextNodes.Push(p.node.Child(i))
+			childNodes.Push(p.node.Child(i))
 		}
 		return true
 	}
@@ -353,7 +387,7 @@ func (p *parallelTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
 
 func (p *parallelTask) OnUpdate(ctx *Context) Result { return Running }
 func (p *parallelTask) OnTerminate(ctx *Context)     { p.completed = 0 }
-func (p *parallelTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
+func (p *parallelTask) OnChildTerminated(result Result, childNodes *NodeList, ctx *Context) Result {
 	p.completed++
 
 	if result == Success && p.completed < p.node.ChildCount() {

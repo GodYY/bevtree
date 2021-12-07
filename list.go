@@ -1,5 +1,6 @@
 package bevtree
 
+// List element pool, used to cache list element.
 type elemPool struct {
 	p *pool
 }
@@ -20,6 +21,7 @@ func (p *elemPool) putElement(e *element) {
 
 var _elemPool = newElemPool()
 
+// List element.
 type element struct {
 	l     *list
 	Value interface{}
@@ -48,6 +50,8 @@ func (e *element) reset() {
 	e.next = nil
 }
 
+// List is a two-way list, like the go built-in container/list.List,
+// but it use element pool to maintains elements.
 type list struct {
 	root element
 	len  int

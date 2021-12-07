@@ -187,11 +187,12 @@ func (e *XMLEncoder) EncodeElementSE(v interface{}, start xml.StartElement) erro
 	return e.Flush()
 }
 
-// EncodeNode invoke EncodeStartEnd to write the bevtree XML encoding of
-// node n to the stream with name as element name:
-// <name.Space:name.Local nodetype="nodetype">
+// EncodeNode encode the behavior tree node to the stream with start as
+// start element. EncodeNode automatically encode the type of the node
+// as xml.Attr and append it to start.
+// <start ... nodetype="nodetype">
 // ...
-// </name.Space:name.Local>
+// </end>
 func (e *XMLEncoder) EncodeNode(n Node, start xml.StartElement) error {
 	if ntAttr, err := n.NodeType().MarshalXMLAttr(XMLName(XMLStringNodeType)); err == nil {
 		start.Attr = append(start.Attr, ntAttr)
@@ -210,6 +211,8 @@ func (e *XMLEncoder) EncodeNode(n Node, start xml.StartElement) error {
 // input stream.
 type XMLDecoder struct {
 	*xml.Decoder
+
+	// The cached token for next decoding.
 	tokenCached xml.Token
 }
 
@@ -247,7 +250,7 @@ func (d *XMLDecoder) Skip() error {
 	return d.Decoder.Skip()
 }
 
-// DecodeElement read element from start to parse info v.
+// DecodeElement read element from start to parse into v.
 func (d *XMLDecoder) DecodeElement(v interface{}, start xml.StartElement) error {
 	if unmarshal, ok := v.(XMLUnmarshaler); ok {
 		return unmarshal.UnmarshalBTXML(d, start)
@@ -256,6 +259,9 @@ func (d *XMLDecoder) DecodeElement(v interface{}, start xml.StartElement) error 
 	}
 }
 
+// DecodeAt search the start element with name at. If the
+// start elment was found, DecodeAt invoke f with the start
+// element and return the result of f.
 func (d *XMLDecoder) DecodeAt(at xml.Name, f func(*XMLDecoder, xml.StartElement) error) error {
 	var err error
 	var token xml.Token
@@ -281,8 +287,12 @@ func (d *XMLDecoder) DecodeAt(at xml.Name, f func(*XMLDecoder, xml.StartElement)
 	return err
 }
 
+// The error used to stop decoding.
 var ErrXMLDecodeStop = errors.New("XML decode stop")
 
+// DecodeUntil invokes f with every start element, until
+// until end element has been readed, or the result of f
+// is non-nil or ErrXMLDecodeStop.
 func (d *XMLDecoder) DecodeUntil(until xml.EndElement, f func(*XMLDecoder, xml.StartElement) error) error {
 	var err error
 	var token xml.Token
@@ -309,6 +319,9 @@ func (d *XMLDecoder) DecodeUntil(until xml.EndElement, f func(*XMLDecoder, xml.S
 	return err
 }
 
+// DecodeAtUntil invokes f with every start element named at,
+// until until end element has been read, or the result of
+// f is non-nil or ErrXMLDecodeStop.
 func (d *XMLDecoder) DecodeAtUntil(at xml.Name, until xml.EndElement, f func(*XMLDecoder, xml.StartElement) error) error {
 	var err error
 	var token xml.Token
@@ -347,7 +360,7 @@ func (d *XMLDecoder) DecodeAtUntil(at xml.Name, until xml.EndElement, f func(*XM
 	return err
 }
 
-// DecodeElementAt looks for the start element named startName, and invoke
+// DecodeElementAt looks for the start element named at, and invoke
 // DecodeElement with it.
 func (d *XMLDecoder) DecodeElementAt(v interface{}, at xml.Name) error {
 	return d.DecodeAt(at, func(d *XMLDecoder, s xml.StartElement) error {
@@ -355,6 +368,8 @@ func (d *XMLDecoder) DecodeElementAt(v interface{}, at xml.Name) error {
 	})
 }
 
+// DecodeElementUntil looks for the start element named name to decode
+// to v, until the until end element has been read.
 func (d *XMLDecoder) DecodeElementUntil(v interface{}, name xml.Name, until xml.EndElement) error {
 	return d.DecodeUntil(until, func(d *XMLDecoder, t xml.StartElement) error {
 		if t.Name == name {
@@ -369,6 +384,8 @@ func (d *XMLDecoder) DecodeElementUntil(v interface{}, name xml.Name, until xml.
 	})
 }
 
+// DecodeNode decode the node type from start, then create the node
+// with the type to decode into it.
 func (d *XMLDecoder) DecodeNode(start xml.StartElement) (Node, error) {
 	nodeTypeXMLName := XMLName(XMLStringNodeType)
 	commentXMLName := XMLName(XMLStringComment)
@@ -418,6 +435,8 @@ func (d *XMLDecoder) DecodeNodeAt(pnode *Node, at xml.Name) error {
 	})
 }
 
+// DecodeNodeUntil works like DecodeUntil, except it works on behavior tree
+// node.
 func (d *XMLDecoder) DecodeNodeUntil(pnode *Node, name xml.Name, until xml.EndElement) error {
 	return d.DecodeUntil(until, func(d *XMLDecoder, s xml.StartElement) error {
 
@@ -846,7 +865,7 @@ func (c *compositeNode) unmarshalXML(d *XMLDecoder, start xml.StartElement) erro
 			}
 		}
 
-		c.childs = childs
+		c.children = childs
 
 		if err := d.Skip(); err != nil {
 			return err
@@ -884,7 +903,7 @@ func (s *SequenceNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) err
 		return errors.WithMessagef(err, "SequenceNode %s Unmarshal", XMLTokenToString(start))
 	}
 
-	for _, v := range s.childs {
+	for _, v := range s.children {
 		v.SetParent(s)
 	}
 
@@ -914,7 +933,7 @@ func (s *SelectorNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) err
 		return errors.WithMessagef(err, "SelectorNode %s Unmarshal", XMLTokenToString(start))
 	}
 
-	for _, v := range s.childs {
+	for _, v := range s.children {
 		v.SetParent(s)
 	}
 
@@ -944,7 +963,7 @@ func (r *RandSequenceNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement)
 		return errors.WithMessagef(err, "RandSequenceNode %s Unmarshal", XMLTokenToString(start))
 	}
 
-	for _, v := range r.childs {
+	for _, v := range r.children {
 		v.SetParent(r)
 	}
 
@@ -974,7 +993,7 @@ func (r *RandSelectorNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement)
 		return errors.WithMessagef(err, "RandSelectorNode %s Unmarshal", XMLTokenToString(start))
 	}
 
-	for _, v := range r.childs {
+	for _, v := range r.children {
 		v.SetParent(r)
 	}
 
@@ -1004,7 +1023,7 @@ func (p *ParallelNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) err
 		return errors.WithMessagef(err, "ParallelNode %s Unmarshal", XMLTokenToString(start))
 	}
 
-	for _, v := range p.childs {
+	for _, v := range p.children {
 		v.SetParent(p)
 	}
 

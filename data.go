@@ -8,15 +8,18 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Return a error indicates that the value type of key is not
+// wanted type.
 func errGetValueType(key string, want reflect.Type, get interface{}) error {
 	return errors.Errorf("Get%s(%s): %s", strings.Title(want.Name()), key, reflect.TypeOf(get).Name())
 }
 
+// Return a error indicate that the value of key is not exist with op.
 func errValueNotExist(key, op string) error {
 	return errors.Errorf("%s(%s): value not exist", op, key)
 }
 
-// Data center.
+// dataSet is used to store key-values, like blackboard.
 type dataSet struct {
 	keyValues map[string]interface{}
 }

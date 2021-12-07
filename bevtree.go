@@ -8,25 +8,29 @@ import (
 	"github.com/GodYY/gutils/assert"
 )
 
+// Node type.
 type NodeType int8
 
 // Node metadata.
 type nodeMETA struct {
-	// node name.
+	// Node type name.
 	name string
 
-	// type value.
+	// Node type value, assigned at registration.
 	typ NodeType
 
-	// function of creating node.
+	// The creator of node.
 	creator func() Node
 
-	// task pool.
+	// task pool, used to cache the destroyed task of this type of node.
 	taskPool *pool
 }
 
+// Use creator to create node.
 func (meta *nodeMETA) createNode() Node { return meta.creator() }
 
+// Create a task of this type of node. First, get a cached task or
+// create a new task. Then, call the OnCreate method of it.
 func (meta *nodeMETA) createTask(node Node) Task {
 	assert.Assert(node != nil, "node nil")
 	task := meta.taskPool.get().(Task)
@@ -34,21 +38,28 @@ func (meta *nodeMETA) createTask(node Node) Task {
 	return task
 }
 
+// Destroy a task of this type of node. First, call the OnDestroy
+// method of the task. Then, put it to be cached to the pool.
 func (meta *nodeMETA) destroyTask(task Task) {
 	task.OnDestroy()
 	meta.taskPool.put(task)
 }
 
+// The mapping of node type name to metadata.
 var nodeName2META = map[string]*nodeMETA{}
+
+// The mapping of node type to metadata.
 var nodeType2META = map[NodeType]*nodeMETA{}
 
+// Get metadata of node type t.
 func getNodeMETAByType(t NodeType) *nodeMETA { return nodeType2META[t] }
 
 func (t NodeType) String() string {
 	return getNodeMETAByType(t).name
 }
 
-// Register one node type.
+// Register a type of node. It create metadata of the type of node,
+// and assigned it a type value.
 func RegisterNodeType(name string, nodeCreator func() Node, taskCreator func() Task) NodeType {
 	assert.NotEqual(name, "", "empty node type name")
 	assert.AssertF(nodeCreator != nil, "node type \"%s\" nodeCreator nil", name)
@@ -68,18 +79,40 @@ func RegisterNodeType(name string, nodeCreator func() Node, taskCreator func() T
 	return meta.typ
 }
 
+// The default node types.
 var (
-	root            = RegisterNodeType("root", func() Node { return newRootNode() }, func() Task { return &rootTask{} })
-	inverter        = RegisterNodeType("inverter", func() Node { return NewInverterNode() }, func() Task { return &inverterTask{} })
-	succeeder       = RegisterNodeType("succeeder", func() Node { return NewSucceederNode() }, func() Task { return &succeederTask{} })
-	repeater        = RegisterNodeType("repeater", func() Node { return NewRepeaterNode(1) }, func() Task { return &repeaterTask{} })
+	// The root node of behavior tree.
+	root = RegisterNodeType("root", func() Node { return newRootNode() }, func() Task { return &rootTask{} })
+
+	// The inverter node.
+	inverter = RegisterNodeType("inverter", func() Node { return NewInverterNode() }, func() Task { return &inverterTask{} })
+
+	// The succeeder node.
+	succeeder = RegisterNodeType("succeeder", func() Node { return NewSucceederNode() }, func() Task { return &succeederTask{} })
+
+	// The repeater node.
+	repeater = RegisterNodeType("repeater", func() Node { return NewRepeaterNode(1) }, func() Task { return &repeaterTask{} })
+
+	// The repeat-until-fail node.
 	repeatUntilFail = RegisterNodeType("repeatuntilfail", func() Node { return NewRepeatUntilFailNode(false) }, func() Task { return &repeatUntilFailTask{} })
-	sequence        = RegisterNodeType("sequence", func() Node { return NewSequenceNode() }, func() Task { return &sequenceTask{} })
-	selector        = RegisterNodeType("selector", func() Node { return NewSelectorNode() }, func() Task { return &selectorTask{} })
-	randSequence    = RegisterNodeType("randsequence", func() Node { return NewRandSequenceNode() }, func() Task { return &randSequenceTask{} })
-	randSelector    = RegisterNodeType("randselector", func() Node { return NewRandSelectorNode() }, func() Task { return &randSelectorTask{} })
-	parallel        = RegisterNodeType("parallel", func() Node { return NewParallelNode() }, func() Task { return &parallelTask{} })
-	behavior        = RegisterNodeType("behavior", func() Node { return NewBevNode(nil) }, func() Task { return &bevTask{} })
+
+	// The sequence node.
+	sequence = RegisterNodeType("sequence", func() Node { return NewSequenceNode() }, func() Task { return &sequenceTask{} })
+
+	// The selector node.
+	selector = RegisterNodeType("selector", func() Node { return NewSelectorNode() }, func() Task { return &selectorTask{} })
+
+	// The random sequence node.
+	randSequence = RegisterNodeType("randsequence", func() Node { return NewRandSequenceNode() }, func() Task { return &randSequenceTask{} })
+
+	// The random selector node.
+	randSelector = RegisterNodeType("randselector", func() Node { return NewRandSelectorNode() }, func() Task { return &randSelectorTask{} })
+
+	// The parallel node.
+	parallel = RegisterNodeType("parallel", func() Node { return NewParallelNode() }, func() Task { return &parallelTask{} })
+
+	// The behavior node.
+	behavior = RegisterNodeType("behavior", func() Node { return NewBevNode(nil) }, func() Task { return &bevTask{} })
 )
 
 func checkNodeTypes() {
@@ -97,14 +130,28 @@ func init() {
 	checkNodeTypes()
 }
 
+// Node represents the structure portion of behavior tree.
+// Node defines the basic function of node of behavior tree.
+// Nodes must implement the Node interface to be considered
+// behavior tree nodes.
 type Node interface {
+	// Node type.
 	NodeType() NodeType
+
+	// Get the parent node.
 	Parent() Node
+
+	// Set the parent node.
 	SetParent(Node)
+
+	// Get the comment.
 	Comment() string
+
+	// Set the comment.
 	SetComment(string)
 }
 
+// The common part of node.
 type node struct {
 	parent  Node
 	comment string
@@ -123,16 +170,27 @@ func (n *node) SetParent(parent Node) {
 func (n *node) Comment() string           { return n.comment }
 func (n *node) SetComment(comment string) { n.comment = comment }
 
+// status indicate the status of node's runtime.
 type status int8
 
 const (
+	// The initail state.
 	sNone = status(iota)
+
+	// Running.
 	sRunning
+
+	// Terminated.
 	sTerminated
+
+	// Was stopped.
 	sStopped
+
+	// Was destroyed.
 	sDestroyed
 )
 
+// The strings represent the status values.
 var statusStrings = [...]string{
 	sNone:       "none",
 	sRunning:    "running",
@@ -143,14 +201,21 @@ var statusStrings = [...]string{
 
 func (s status) String() string { return statusStrings[s] }
 
+// lazyStop indicate node's runtime how to stop.
 type lazyStop int8
 
 const (
+	// Don't need to stop.
 	lzsNone = lazyStop(iota)
+
+	// Stop before update.
 	lzsBeforeUpdate
+
+	// Stop after update.
 	lzsAfterUpdate
 )
 
+// The strings represent the lazyStop values.
 var lazyStopStrings = [...]string{
 	lzsNone:         "none",
 	lzsBeforeUpdate: "before-Update",
@@ -159,14 +224,27 @@ var lazyStopStrings = [...]string{
 
 func (l lazyStop) String() string { return lazyStopStrings[l] }
 
+// Result represents the running results of node's runtime and even behavior trees.
 type Result int8
 
 const (
+	// Success can indicate that the behavior ran successfully,
+	// or the node made a decision successfully, or the behavior
+	// tree ran successfully.
 	Success = Result(iota)
+
+	// Failure can indicate that the behavior fails to run, or
+	// the node fails to make a decision, or the behavior tree
+	// fails to run.
 	Failure
+
+	// Running can indicate that a behavior run is running, or
+	// that a node is making a decision, or that the behavior
+	// tree is running.
 	Running
 )
 
+// The strings repesents the Result values.
 var resultStrings = [...]string{
 	Success: "success",
 	Failure: "failure",
@@ -175,11 +253,19 @@ var resultStrings = [...]string{
 
 func (r Result) String() string { return resultStrings[r] }
 
+// TaskType indicate how the task will run.
 type TaskType int8
 
 const (
+	// Single task, no any subtask.
 	Single = TaskType(iota)
+
+	// Serial task, there are subtasks and the subtasks run one
+	// by one.
 	Serial
+
+	// Parallel task, there are subtasks and the subtasks run
+	// together.
 	Parallel
 )
 
@@ -191,28 +277,76 @@ var taskTypeStrings = [...]string{
 
 func (tt TaskType) String() string { return taskTypeStrings[tt] }
 
+// Task represents the independent parts of behavir tree node.
+// Task maintains runtime data and implements the logic of the
+// corresponding node.
 type Task interface {
+	// Get the TaskType.
 	TaskType() TaskType
+
+	// OnCreate is called immediately after the Task is created.
+	// node indicates the node on which the Task is created.
 	OnCreate(node Node)
+
+	// OnDestroy is called before the Task is destroyed.
 	OnDestroy()
-	OnInit(nextNodes *NodeList, ctx *Context) bool
+
+	// OnInit is called before the first update of the Task.
+	// childNodes is used to return the child nodes that need
+	// to run next. ctx represents the running context of the
+	// behavior tree.
+	OnInit(childNodes *NodeList, ctx *Context) bool
+
+	// OnUpdate is called until the Task is terminated.
 	OnUpdate(ctx *Context) Result
+
+	// OnTerminate is called after ths last update of the Task.
 	OnTerminate(ctx *Context)
-	OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result
+
+	// OnChildTerminated is called when a sub Task is terminated.
+	//
+	// result Indicates the running result of the subtask.
+	// childNodes is used to return the child nodes that need to
+	// run next.
+	//
+	// OnChildTerminated returns the decision result.
+	OnChildTerminated(result Result, childNodes *NodeList, ctx *Context) Result
 }
 
+// agent represents common parts of behavior tree node.
+// agent links Node and Task, maintains status infomation
+// and implements the workflow of behavior tree node.
+// All ruuning agents form a run-time behavior tree.
 type agent struct {
-	node             Node
-	task             Task
-	parent           *agent
-	firstChild       *agent
-	prev, next       *agent
+	// Corresponding Node.
+	node Node
+
+	// Corresponding Task.
+	task Task
+
+	// Parent agent.
+	parent *agent
+
+	// Child agent list.
+	firstChild *agent
+
+	// Previous, next agent.
+	prev, next *agent
+
+	// Store the serial number of the latest updating.
 	latestUpdateSeri uint32
-	st               status
-	lzStop           lazyStop
-	elem             *element
+
+	// Store the current status.
+	st status
+
+	// Store the lazyStop type.
+	lzStop lazyStop
+
+	// agent placeholder int the work queue.
+	elem *element
 }
 
+// onCreate is called immediately after the agent is created.
 func (a *agent) onCreate(node Node, task Task) {
 	a.node = node
 	a.task = task
@@ -221,11 +355,15 @@ func (a *agent) onCreate(node Node, task Task) {
 	a.lzStop = lzsNone
 }
 
+// onDestroy is called before the agent is destroyed.
 func (a *agent) onDestroy() {
 	a.node = nil
 	a.task = nil
 }
 
+// Indicates whether the agent is persistent. That is the
+// the update method of the agent must be called whenever
+// the behavior tree update before it terminated.
 func (a *agent) isPersistent() bool { return a.task.TaskType() == Single }
 
 func (a *agent) getNext() *agent {
@@ -242,6 +380,7 @@ func (a *agent) getPrev() *agent {
 	return nil
 }
 
+// Add a running child for the agent.
 func (a *agent) addChild(child *agent) {
 	assert.Assert(child != nil && child.parent == nil, "child nil or has parent")
 
@@ -259,6 +398,7 @@ func (a *agent) addChild(child *agent) {
 	child.parent = a
 }
 
+// Remove a child for the agent.
 func (a *agent) removeChild(child *agent) {
 	assert.Assert(child != nil && child.parent == a, "child nil or parent not match")
 
@@ -286,6 +426,7 @@ func (a *agent) setLZStop(lzStop lazyStop) { a.lzStop = lzStop }
 func (a *agent) getElem() *element         { return a.elem }
 func (a *agent) setElem(elem *element)     { a.elem = elem }
 
+// Running logic of the agent.
 func (a *agent) update(ctx *Context) Result {
 	if debug {
 		log.Printf("agent nodetype:%v update %v %v", a.node.NodeType(), a.getStatus(), a.getLZStop())
@@ -308,7 +449,7 @@ func (a *agent) update(ctx *Context) Result {
 
 	// init.
 	if st == sNone {
-		if !a.task.OnInit(ctx.getNodeList(), ctx) {
+		if !a.task.OnInit(ctx.getChildNodeList(), ctx) {
 			a.task.OnTerminate(ctx)
 			a.setStatus(sTerminated)
 			return Failure
@@ -317,13 +458,13 @@ func (a *agent) update(ctx *Context) Result {
 		if debug {
 			switch a.task.TaskType() {
 			case Single:
-				assert.AssertF(ctx.getNodeList().Len() == 0, "node type \"%s\" has children", a.node.NodeType().String())
+				assert.AssertF(ctx.getChildNodeList().Len() == 0, "node type \"%s\" has children", a.node.NodeType().String())
 
 			case Serial:
-				assert.AssertF(ctx.getNodeList().Len() == 1, "node type \"%s\" have no or more than one child", a.node.NodeType().String())
+				assert.AssertF(ctx.getChildNodeList().Len() == 1, "node type \"%s\" have no or more than one child", a.node.NodeType().String())
 
 			case Parallel:
-				assert.AssertF(ctx.getNodeList().Len() > 0, "node type \"%s\" have no children", a.node.NodeType().String())
+				assert.AssertF(ctx.getChildNodeList().Len() > 0, "node type \"%s\" have no children", a.node.NodeType().String())
 			}
 		}
 
@@ -349,15 +490,19 @@ func (a *agent) update(ctx *Context) Result {
 	return result
 }
 
+// Procoess child nodes filtered by making decision. Child nodes
+// are cached in Context.
 func (a *agent) processNextChildren(ctx *Context) {
-	nodeList := ctx.getNodeList()
-	for nextChildNode := nodeList.pop(); nextChildNode != nil; nextChildNode = nodeList.pop() {
+	childNodeList := ctx.getChildNodeList()
+	for nextChildNode := childNodeList.pop(); nextChildNode != nil; nextChildNode = childNodeList.pop() {
 		childAgent := createAgent(nextChildNode)
 		a.addChild(childAgent)
 		ctx.pushCurrentAgent(childAgent)
 	}
 }
 
+// If the agent is running, stop it. remove all child agents,
+// notify the task to terminate.
 func (a *agent) stop(ctx *Context) {
 	if a.getStatus() != sRunning {
 		return
@@ -369,9 +514,9 @@ func (a *agent) stop(ctx *Context) {
 
 	child := a.firstChild
 	for child != nil {
-		node := child
+		agent := child
 		child = child.getNext()
-		a.removeChild(node)
+		a.removeChild(agent)
 	}
 
 	a.task.OnTerminate(ctx)
@@ -379,6 +524,8 @@ func (a *agent) stop(ctx *Context) {
 	a.setLZStop(lzsNone)
 }
 
+// Lazy-Stop the agent if it is running and not set with
+// lazy-stop state yet.
 func (a *agent) lazyStop(ctx *Context) {
 	if debug {
 		log.Printf("agent nodetype:%v lazyStop", a.node.NodeType())
@@ -390,16 +537,22 @@ func (a *agent) lazyStop(ctx *Context) {
 	}
 
 	if a.latestUpdateSeri != ctx.getUpdateSeri() {
+		// Not updated on the latest updating.
+		// Stop after update.
 		a.setLZStop(lzsAfterUpdate)
 	} else {
+		// Updated on the latest updating.
+		// Stop before update.
 		a.setLZStop(lzsBeforeUpdate)
 	}
 
+	// Lazy-Stop need agent to update again.
 	if a.elem == nil || a.getLZStop() == lzsBeforeUpdate {
 		ctx.pushCurrentAgent(a)
 	}
 }
 
+// The implementation of Lazy-Stop on agent.
 func (a *agent) doLazyStop(ctx *Context) Result {
 	a.lazyStopChildren(ctx)
 	a.task.OnTerminate(ctx)
@@ -418,6 +571,7 @@ func (a *agent) lazyStopChildren(ctx *Context) {
 	}
 }
 
+// onChildTerminated is called when a child agent is terminated.
 func (a *agent) onChildTerminated(child *agent, result Result, ctx *Context) Result {
 	if debug {
 		log.Printf("agent nodetype:%v onChildTerminated %v", a.node.NodeType(), result)
@@ -426,34 +580,40 @@ func (a *agent) onChildTerminated(child *agent, result Result, ctx *Context) Res
 		assert.NotEqual(result, Running, "child terminated with running")
 	}
 
+	// Remove child.
 	a.removeChild(child)
 
+	// Not running, Failure.
 	if a.getStatus() != sRunning {
 		return Failure
 	}
 
+	// Lazy-Stopping, Running.
 	if a.getLZStop() != lzsNone {
 		return Running
 	}
 
-	if result = a.task.OnChildTerminated(result, ctx.getNodeList(), ctx); result == Running {
+	// Invoke task.OnChildTerminated to make decision.
+	if result = a.task.OnChildTerminated(result, ctx.getChildNodeList(), ctx); result == Running {
 		if debug {
 			switch a.task.TaskType() {
 			case Serial:
-				assert.AssertF(ctx.getNodeList().Len() == 1, "node type \"%s\" has no or more than one next child", a.node.NodeType().String())
+				assert.AssertF(ctx.getChildNodeList().Len() == 1, "node type \"%s\" has no or more than one next child", a.node.NodeType().String())
 
 			case Parallel:
-				assert.AssertF(ctx.getNodeList().Len() == 0, "node type \"%s\" has next children", a.node.NodeType().String())
+				assert.AssertF(ctx.getChildNodeList().Len() == 0, "node type \"%s\" has next children", a.node.NodeType().String())
 			}
 		}
 
 		a.processNextChildren(ctx)
 	} else {
 		if debug {
-			assert.AssertF(ctx.getNodeList().Len() == 0, "node type \"%s\" has next children on terminating.", a.node.NodeType())
+			assert.AssertF(ctx.getChildNodeList().Len() == 0, "node type \"%s\" has next children on terminating.", a.node.NodeType())
 		}
 
+		// Lazy-Stop children, avoid nested calls.
 		a.lazyStopChildren(ctx)
+
 		a.task.OnTerminate(ctx)
 		a.setStatus(sTerminated)
 		a.setLZStop(lzsNone)
@@ -462,8 +622,10 @@ func (a *agent) onChildTerminated(child *agent, result Result, ctx *Context) Res
 	return result
 }
 
+// The pool to cache destroyed agent.
 var agentPool = newPool(func() interface{} { return &agent{} })
 
+// Create agent using node.
 func createAgent(node Node) *agent {
 	nodeMETA := getNodeMETAByType(node.NodeType())
 	if nodeMETA == nil {
@@ -483,6 +645,7 @@ func createAgent(node Node) *agent {
 	return agent
 }
 
+// Destroy the agent.
 func destroyAgent(agent *agent) {
 	if debug {
 		assert.AssertF(agent.getElem() == nil, "agent node type \"%s\" still in list on destroy", agent.node.NodeType().String())
@@ -499,6 +662,9 @@ func destroyAgent(agent *agent) {
 	agentPool.put(agent)
 }
 
+// Root node, a special node in behavior tree. it has
+// only one child and no parent. It returns result of
+// child directly.
 type rootNode struct {
 	child Node
 }
@@ -528,11 +694,14 @@ func (r *rootNode) SetChild(child Node) {
 	}
 }
 
+// rootNode Task.
 type rootTask struct {
 	node *rootNode
 }
 
+// rootNode Task is serail task.
 func (r *rootTask) TaskType() TaskType { return Serial }
+
 func (r *rootTask) OnCreate(node Node) { r.node = node.(*rootNode) }
 func (r *rootTask) OnDestroy()         { r.node = nil }
 
@@ -547,14 +716,22 @@ func (r *rootTask) OnInit(nextNodes *NodeList, ctx *Context) bool {
 
 func (r *rootTask) OnUpdate(ctx *Context) Result { return Running }
 func (r *rootTask) OnTerminate(ctx *Context)     {}
+
 func (r *rootTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx *Context) Result {
+	// Returns result of child directly.
 	return result
 }
 
+// BevTree, contains the structure data
 type BevTree struct {
-	name    string
+	// The name of the behavior tree.
+	name string
+
+	// The comment of the behavior tree.
 	comment string
-	root    *rootNode
+
+	// The root node of behavior tree.
+	root *rootNode
 }
 
 func NewBevTree() *BevTree {
@@ -577,12 +754,20 @@ func (t *BevTree) Clear() {
 
 func (t *BevTree) Update(ctx *Context) Result {
 	if ctx.noAgents() {
+		// No agents indicate the behavior tree was not run yet
+		// or it had completed a traversal from root to root node.
+		// Need to start a new traversal from the root node.
 		ctx.pushCurrentAgent(createAgent(t.root))
 	}
 
+	// Update the Context.
 	ctx.update()
 
+	// The default result.
 	result := Running
+
+	// Run agent one by one until there are no agents at current
+	// updating or back to root node.
 	for agent := ctx.popCurrentAgent(); agent != nil; agent = ctx.popCurrentAgent() {
 		r := agent.update(ctx)
 		st := agent.getStatus()
@@ -592,32 +777,48 @@ func (t *BevTree) Update(ctx *Context) Result {
 		}
 
 		if st == sTerminated {
-			terminated := true
+			// agent terminated, submit result to parent for
+			// making decision.
+
+			// The flag indicating whether to back to the root
+			// node.
+			isBackToRoot := true
+
+			// Submit result to parent until no parent.
 			for agent.getParent() != nil {
 				parent := agent.getParent()
 				parentTerminated := parent.getStatus() != sRunning
 
 				r = parent.onChildTerminated(agent, r, ctx)
 				if parentTerminated || r == Running {
-					terminated = false
+					// Parent already terminated or still running, stop.
+					isBackToRoot = false
 					break
 				}
 
 				assert.Assert(parent.getElem() == nil, "parent is still in work list")
 
+				// Destroy the child agent.
 				destroyAgent(agent)
+
 				agent = parent
 			}
 
+			// Destroy the last terminated agent.
 			destroyAgent(agent)
 
-			if terminated {
+			if isBackToRoot {
+				// Back to root node, update result.
+
 				assert.Equal(result, Running, "Update terminated reapeatedly")
 				assert.NotEqual(r, Running, "Update terminated with RRunning")
 
 				result = r
 			}
 		} else if agent.isPersistent() {
+			// agent still running and persistent, set it to
+			// update at the next updating.
+
 			ctx.pushNextAgent(agent)
 		}
 	}

@@ -2,12 +2,19 @@ package bevtree
 
 import "github.com/GodYY/gutils/assert"
 
+// DecoratorNode interface indicates the functions that
+// a decorator node in behavior tree must implement.
 type DecoratorNode interface {
 	Node
+
+	// Get the child node.
 	Child() Node
+
+	// Set the child node.
 	SetChild(Node)
 }
 
+// The common part of decoratoer node.
 type decoratorNode struct {
 	node
 	child Node
@@ -35,6 +42,8 @@ func (d *decoratorNode) setChild(child Node) bool {
 	return child != nil
 }
 
+// Inverter node runs child and returns the reverse value of
+// child's result.
 type InverterNode struct {
 	decoratorNode
 }
@@ -51,6 +60,7 @@ func (i *InverterNode) SetChild(child Node) {
 	}
 }
 
+// The inverter node task.
 type inverterTask struct {
 	node *InverterNode
 }
@@ -79,6 +89,7 @@ func (i *inverterTask) OnChildTerminated(result Result, _ *NodeList, ctx *Contex
 	}
 }
 
+// Succeeder node runs child node and always return success.
 type SucceederNode struct {
 	decoratorNode
 }
@@ -95,6 +106,7 @@ func (s *SucceederNode) SetChild(child Node) {
 	}
 }
 
+// Succeeder node task.
 type succeederTask struct {
 	node *SucceederNode
 }
@@ -119,6 +131,8 @@ func (s *succeederTask) OnChildTerminated(result Result, _ *NodeList, ctx *Conte
 	return Success
 }
 
+// Repeater node runs child node in limited times until child
+// returns failure. It returns the result of child directly.
 type RepeaterNode struct {
 	decoratorNode
 	limited int
@@ -149,6 +163,7 @@ func (r *RepeaterNode) SetLimited(limited int) {
 	r.limited = limited
 }
 
+// Repeater node task.
 type repeaterTask struct {
 	node  *RepeaterNode
 	count int
@@ -180,6 +195,9 @@ func (r *repeaterTask) OnChildTerminated(result Result, nextNodes *NodeList, ctx
 	}
 }
 
+// RepeatUntilFail node runs child node until child returns
+// failure. It returns success if successOnFail is true or
+// failure.
 type RepeatUntilFailNode struct {
 	decoratorNode
 	successOnFail bool
@@ -203,6 +221,7 @@ func (r *RepeatUntilFailNode) SetChild(child Node) {
 func (r *RepeatUntilFailNode) SuccessOnFail() bool                 { return r.successOnFail }
 func (r *RepeatUntilFailNode) SetSuccessOnFail(successOnFail bool) { r.successOnFail = successOnFail }
 
+// RepeatUntilFail node task.
 type repeatUntilFailTask struct {
 	node *RepeatUntilFailNode
 }

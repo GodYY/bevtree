@@ -36,17 +36,17 @@ type Context struct {
 	updateSeri          uint32
 	agentList           *list
 	agentUpdateBoundary *element
-	nodeList            *NodeList
+	childNodeList       *NodeList
 	*dataSet
 	userData interface{}
 }
 
 func NewContext(userData interface{}) *Context {
 	ctx := &Context{
-		agentList: newList(),
-		nodeList:  newNodeList(),
-		dataSet:   newDataSet(),
-		userData:  userData,
+		agentList:     newList(),
+		childNodeList: newNodeList(),
+		dataSet:       newDataSet(),
+		userData:      userData,
 	}
 
 	finalize.SetFinalizer(ctx)
@@ -61,7 +61,7 @@ func (ctx *Context) Release() {
 
 func (ctx *Context) release() {
 	ctx.clearAgent()
-	ctx.nodeList.clear()
+	ctx.childNodeList.clear()
 	ctx.dataSet.clear()
 	ctx.dataSet = nil
 	ctx.userData = nil
@@ -89,7 +89,7 @@ func (ctx *Context) noAgents() bool {
 	return ctx.agentList.getLen() == 0 || (ctx.agentList.getLen() == 1 && ctx.agentList.front() == ctx.agentUpdateBoundary)
 }
 
-func (ctx *Context) getNodeList() *NodeList { return ctx.nodeList }
+func (ctx *Context) getChildNodeList() *NodeList { return ctx.childNodeList }
 
 func (ctx *Context) lazyPushUpdateBoundary() {
 	if ctx.agentUpdateBoundary == nil {

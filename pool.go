@@ -4,6 +4,7 @@ import (
 	"sync"
 )
 
+// A packaging of go built-in sync.Pool.
 type pool struct {
 	p sync.Pool
 }
