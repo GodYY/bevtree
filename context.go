@@ -97,7 +97,7 @@ func (ctx *Context) lazyPushUpdateBoundary() {
 	}
 }
 
-func (ctx *Context) pushAgent(agent *agent, nextRound bool) {
+func (ctx *Context) pushAgent_(agent *agent, nextRound bool) {
 	assert.Assert(agent != nil, "agent nil")
 
 	ctx.lazyPushUpdateBoundary()
@@ -121,11 +121,11 @@ func (ctx *Context) pushAgent(agent *agent, nextRound bool) {
 	}
 }
 
-func (ctx *Context) pushCurrentAgent(agent *agent) {
-	ctx.pushAgent(agent, false)
+func (ctx *Context) pushAgent(agent *agent) {
+	ctx.pushAgent_(agent, false)
 }
 
-func (ctx *Context) popCurrentAgent() *agent {
+func (ctx *Context) popAgent() *agent {
 	ctx.lazyPushUpdateBoundary()
 
 	elem := ctx.agentList.front()
@@ -141,8 +141,8 @@ func (ctx *Context) popCurrentAgent() *agent {
 	return agent
 }
 
-func (ctx *Context) pushNextAgent(agent *agent) {
-	ctx.pushAgent(agent, true)
+func (ctx *Context) pushPendingAgent(agent *agent) {
+	ctx.pushAgent_(agent, true)
 }
 
 func (ctx *Context) removeAgent(agent *agent) {

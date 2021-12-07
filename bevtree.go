@@ -497,7 +497,7 @@ func (a *agent) processNextChildren(ctx *Context) {
 	for nextChildNode := childNodeList.pop(); nextChildNode != nil; nextChildNode = childNodeList.pop() {
 		childAgent := createAgent(nextChildNode)
 		a.addChild(childAgent)
-		ctx.pushCurrentAgent(childAgent)
+		ctx.pushAgent(childAgent)
 	}
 }
 
@@ -548,7 +548,7 @@ func (a *agent) lazyStop(ctx *Context) {
 
 	// Lazy-Stop need agent to update again.
 	if a.elem == nil || a.getLZStop() == lzsBeforeUpdate {
-		ctx.pushCurrentAgent(a)
+		ctx.pushAgent(a)
 	}
 }
 
@@ -757,7 +757,7 @@ func (t *BevTree) Update(ctx *Context) Result {
 		// No agents indicate the behavior tree was not run yet
 		// or it had completed a traversal from root to root node.
 		// Need to start a new traversal from the root node.
-		ctx.pushCurrentAgent(createAgent(t.root))
+		ctx.pushAgent(createAgent(t.root))
 	}
 
 	// Update the Context.
@@ -768,7 +768,7 @@ func (t *BevTree) Update(ctx *Context) Result {
 
 	// Run agent one by one until there are no agents at current
 	// updating or back to root node.
-	for agent := ctx.popCurrentAgent(); agent != nil; agent = ctx.popCurrentAgent() {
+	for agent := ctx.popAgent(); agent != nil; agent = ctx.popAgent() {
 		r := agent.update(ctx)
 		st := agent.getStatus()
 		if st == sStopped {
@@ -819,7 +819,7 @@ func (t *BevTree) Update(ctx *Context) Result {
 			// agent still running and persistent, set it to
 			// update at the next updating.
 
-			ctx.pushNextAgent(agent)
+			ctx.pushPendingAgent(agent)
 		}
 	}
 
