@@ -50,7 +50,7 @@ func TestPool(t *testing.T) {
 }
 
 func TestDebugReset(t *testing.T) {
-	tree := NewBevTree()
+	tree := NewTree()
 
 	paral := NewParallelNode()
 
@@ -94,7 +94,7 @@ func TestDebugReset(t *testing.T) {
 }
 
 func TestEntityFinalizer(t *testing.T) {
-	tree := NewBevTree()
+	tree := NewTree()
 
 	paral := NewParallelNode()
 

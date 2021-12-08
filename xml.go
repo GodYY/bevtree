@@ -22,7 +22,7 @@ func XMLName(name string) xml.Name {
 // XML strings.
 const (
 
-	// xml name for BevTree.
+	// xml name for Tree.
 	XMLStringBevTree = "bevtree"
 
 	// xml name for name.
@@ -467,7 +467,7 @@ func (t *NodeType) UnmarshalXMLAttr(attr xml.Attr) error {
 }
 
 // MarshalXMLBevTree return an bevtree XML encoding of t.
-func MarshalXMLBevTree(t *BevTree) ([]byte, error) {
+func MarshalXMLBevTree(t *Tree) ([]byte, error) {
 	if t == nil {
 		return nil, nil
 	}
@@ -484,9 +484,9 @@ func MarshalXMLBevTree(t *BevTree) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// UnmarshalXMLBevTree parses the bevtree XML-encoded BevTree
-// data and stores the result in the BevTree pointed to by t.
-func UnmarshalXMLBevTree(data []byte, t *BevTree) error {
+// UnmarshalXMLBevTree parses the bevtree XML-encoded Tree
+// data and stores the result in the Tree pointed to by t.
+func UnmarshalXMLBevTree(data []byte, t *Tree) error {
 	if data == nil || t == nil {
 		return nil
 	}
@@ -499,7 +499,7 @@ func UnmarshalXMLBevTree(data []byte, t *BevTree) error {
 
 // EncodeBevTreeXMLFile works like MarshalXMLBevTree but write
 // encoded data to file.
-func EncodeBevTreeXMLFile(path string, t *BevTree) (err error) {
+func EncodeBevTreeXMLFile(path string, t *Tree) (err error) {
 	if t == nil {
 		return nil
 	}
@@ -530,7 +530,7 @@ func EncodeBevTreeXMLFile(path string, t *BevTree) (err error) {
 
 // DecodeBevTreeXMLFile works like UnmarshalXMLBevTree but read
 // encoded data from file.
-func DecodeBevTreeXMLFile(path string, t *BevTree) error {
+func DecodeBevTreeXMLFile(path string, t *Tree) error {
 	if t == nil {
 		return nil
 	}
@@ -546,9 +546,9 @@ func DecodeBevTreeXMLFile(path string, t *BevTree) error {
 	return dec.DecodeElementAt(t, XMLName(XMLStringBevTree))
 }
 
-func (t *BevTree) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
+func (t *Tree) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 	if debug {
-		log.Printf("BevTree.MarshalBTXML start:%v", start)
+		log.Printf("Tree.MarshalBTXML start:%v", start)
 	}
 
 	if t.name != "" {
@@ -567,15 +567,15 @@ func (t *BevTree) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 
 		return nil
 	}); err != nil {
-		return errors.WithMessagef(err, "BevTree %s Marshal", XMLTokenToString(start))
+		return errors.WithMessagef(err, "Tree %s Marshal", XMLTokenToString(start))
 	}
 
 	return nil
 }
 
-func (t *BevTree) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
+func (t *Tree) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 	if debug {
-		log.Printf("BevTree.UnmarshalBTXML start:%v", start)
+		log.Printf("Tree.UnmarshalBTXML start:%v", start)
 	}
 
 	for _, attr := range start.Attr {
@@ -588,7 +588,7 @@ func (t *BevTree) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 
 	root := newRootNode()
 	if err := d.DecodeElementAt(root, XMLName(XMLStringRoot)); err != nil {
-		return errors.WithMessagef(err, "BevTree %s Unmarshal root", XMLTokenToString(start))
+		return errors.WithMessagef(err, "Tree %s Unmarshal root", XMLTokenToString(start))
 	}
 
 	t.root = root

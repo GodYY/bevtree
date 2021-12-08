@@ -6,11 +6,11 @@ import (
 
 type SubtreeNode struct {
 	node
-	subtree            *BevTree
+	subtree            *Tree
 	independentDataSet bool
 }
 
-func NewSubtreeNode(subtree *BevTree, independentDataSet bool) *SubtreeNode {
+func NewSubtreeNode(subtree *Tree, independentDataSet bool) *SubtreeNode {
 	assert.Assert(subtree != nil, "subtree inil")
 	return &SubtreeNode{
 		node:               newNode(),
@@ -21,9 +21,9 @@ func NewSubtreeNode(subtree *BevTree, independentDataSet bool) *SubtreeNode {
 
 func (s *SubtreeNode) NodeType() NodeType { return subtree }
 
-func (s *SubtreeNode) Subtree() *BevTree { return s.subtree }
+func (s *SubtreeNode) Subtree() *Tree { return s.subtree }
 
-func (s *SubtreeNode) SetSubtree(subtree *BevTree) { s.subtree = subtree }
+func (s *SubtreeNode) SetSubtree(subtree *Tree) { s.subtree = subtree }
 
 func (s *SubtreeNode) IndependentDataSet() bool { return s.independentDataSet }
 

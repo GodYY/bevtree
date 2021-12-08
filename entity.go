@@ -51,7 +51,7 @@ func (nl *nodeList) clear() { nl.l.init() }
 // Entity used to run a behavior tree.
 type Entity interface {
 	// Get the corresponding behavior tree.
-	BevTree() *BevTree
+	Tree() *Tree
 
 	// Get the user data.
 	UserData() interface{}
@@ -74,7 +74,7 @@ type Entity interface {
 // Entity implementation.
 type entity struct {
 	// Corresponding behavior tree.
-	bevtree *BevTree
+	bevtree *Tree
 
 	// The context.
 	ctx *context
@@ -91,11 +91,11 @@ type entity struct {
 	childNodeList *nodeList
 }
 
-func NewEntity(bevtree *BevTree, userData interface{}) Entity {
+func NewEntity(bevtree *Tree, userData interface{}) Entity {
 	return newEntity(bevtree, newContext(userData))
 }
 
-func newEntity(bevtree *BevTree, ctx *context) *entity {
+func newEntity(bevtree *Tree, ctx *context) *entity {
 	assert.Assert(bevtree != nil, "bevtree nil")
 	assert.Assert(ctx != nil, "ctx nil")
 
@@ -138,7 +138,7 @@ func (e *entity) Finalizer() {
 	e.release()
 }
 
-func (e *entity) BevTree() *BevTree { return e.bevtree }
+func (e *entity) Tree() *Tree { return e.bevtree }
 
 func (e *entity) Context() Context { return e.ctx }
 

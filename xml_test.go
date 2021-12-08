@@ -66,7 +66,7 @@ func TestBevTreeMarshalXML(t *testing.T) {
 
 	rand.Seed(time.Now().UnixNano())
 
-	tree := NewBevTree()
+	tree := NewTree()
 	tree.SetName("XML测试")
 	tree.SetComment("用于XML测试的行为树")
 	paral := NewParallelNode()
@@ -140,20 +140,20 @@ func TestBevTreeMarshalXML(t *testing.T) {
 	entity.Update()
 	v, _ := entity.Context().DataSet().GetInt(key)
 	if v != sum {
-		t.Fatalf("test BevTree before marshal: sum(%d) != %d", v, sum)
+		t.Fatalf("test Tree before marshal: sum(%d) != %d", v, sum)
 	}
 	entity.Release()
 
 	data, err := MarshalXMLBevTree(tree)
 	if err != nil {
-		t.Fatal("marshal BevTree:", err)
+		t.Fatal("marshal Tree:", err)
 	} else {
-		t.Log("marshal BevTree:", string(data))
+		t.Log("marshal Tree:", string(data))
 	}
 
-	newTree := new(BevTree)
+	newTree := new(Tree)
 	if err := UnmarshalXMLBevTree(data, newTree); err != nil {
-		t.Fatal("unmarshal previos BevTree:", err)
+		t.Fatal("unmarshal previos Tree:", err)
 	}
 
 	entity = NewEntity(newTree, nil)
@@ -162,7 +162,7 @@ func TestBevTreeMarshalXML(t *testing.T) {
 
 	v, _ = entity.Context().DataSet().GetInt(key)
 	if v != sum {
-		t.Fatalf("test BevTree after unmarshal: sum(%d) != %d", v, sum)
+		t.Fatalf("test Tree after unmarshal: sum(%d) != %d", v, sum)
 	}
 
 }

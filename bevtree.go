@@ -725,8 +725,8 @@ func (r *rootTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx
 	return result
 }
 
-// BevTree, contains the structure data
-type BevTree struct {
+// Tree, contains the structure data
+type Tree struct {
 	// The name of the behavior tree.
 	name string
 
@@ -737,20 +737,20 @@ type BevTree struct {
 	root *rootNode
 }
 
-func NewBevTree() *BevTree {
-	tree := &BevTree{
+func NewTree() *Tree {
+	tree := &Tree{
 		root: newRootNode(),
 	}
 	return tree
 }
 
-func (t *BevTree) Name() string              { return t.name }
-func (t *BevTree) SetName(name string)       { t.name = name }
-func (t *BevTree) Comment() string           { return t.comment }
-func (t *BevTree) SetComment(comment string) { t.comment = comment }
+func (t *Tree) Name() string              { return t.name }
+func (t *Tree) SetName(name string)       { t.name = name }
+func (t *Tree) Comment() string           { return t.comment }
+func (t *Tree) SetComment(comment string) { t.comment = comment }
 
-func (t *BevTree) Root() *rootNode { return t.root }
+func (t *Tree) Root() *rootNode { return t.root }
 
-func (t *BevTree) Clear() {
+func (t *Tree) Clear() {
 	t.root.SetChild(nil)
 }

@@ -127,13 +127,13 @@ func (b *behaviorUpdate) OnUpdate(e Context) Result {
 func (b *behaviorUpdate) OnTerminate(e Context) { b.count = 0 }
 
 type test struct {
-	tree   *BevTree
+	tree   *Tree
 	entity Entity
 }
 
 func newTest() *test {
 	t := new(test)
-	t.tree = NewBevTree()
+	t.tree = NewTree()
 	t.entity = NewEntity(t.tree, nil)
 	return t
 }
@@ -421,7 +421,7 @@ func TestRepeatUntilFail(t *testing.T) {
 
 func TestShareTree(t *testing.T) {
 
-	tree := NewBevTree()
+	tree := NewTree()
 	paral := NewParallelNode()
 	tree.Root().SetChild(paral)
 
@@ -480,7 +480,7 @@ func TestShareTree(t *testing.T) {
 }
 
 func TestReset(t *testing.T) {
-	tree := NewBevTree()
+	tree := NewTree()
 
 	paral := NewParallelNode()
 
@@ -522,7 +522,7 @@ func TestRemoveChild(t *testing.T) {
 
 	rand.Seed(time.Now().UnixNano())
 
-	tree := NewBevTree()
+	tree := NewTree()
 	paral := NewParallelNode()
 	tree.Root().SetChild(paral)
 
@@ -607,7 +607,7 @@ func TestSubtree(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 
 	{
-		subtree_a := NewBevTree()
+		subtree_a := NewTree()
 		parallel.AddChild(NewSubtreeNode(subtree_a, false))
 		paral := NewParallelNode()
 		subtree_a.Root().SetChild(paral)
@@ -664,7 +664,7 @@ func TestSubtree(t *testing.T) {
 	}
 
 	{
-		subtree_b := NewBevTree()
+		subtree_b := NewTree()
 		parallel.AddChild(NewSubtreeNode(subtree_b, false))
 		paral := NewParallelNode()
 		subtree_b.Root().SetChild(paral)
