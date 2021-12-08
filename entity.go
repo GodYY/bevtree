@@ -92,11 +92,16 @@ type entity struct {
 }
 
 func NewEntity(bevtree *BevTree, userData interface{}) Entity {
+	return newEntity(bevtree, newContext(userData))
+}
+
+func newEntity(bevtree *BevTree, ctx *context) *entity {
 	assert.Assert(bevtree != nil, "bevtree nil")
+	assert.Assert(ctx != nil, "ctx nil")
 
 	entity := &entity{
 		bevtree:       bevtree,
-		ctx:           newContext(userData),
+		ctx:           ctx,
 		agentList:     newList(),
 		childNodeList: newNodeList(),
 	}
@@ -139,7 +144,7 @@ func (e *entity) Context() Context { return e.ctx }
 
 func (e *entity) UserData() interface{} { return e.ctx.UserData() }
 
-func (e *entity) getUpdateSeri() uint32 { return e.ctx.getUpdateSeri() }
+func (e *entity) getUpdateSeri() uint32 { return e.ctx.UpdateSeri() }
 
 func (e *entity) getChildNodeList() *nodeList { return e.childNodeList }
 

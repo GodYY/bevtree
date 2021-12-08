@@ -113,6 +113,9 @@ var (
 
 	// The behavior node.
 	behavior = RegisterNodeType("behavior", func() Node { return NewBevNode(nil) }, func() Task { return &bevTask{} })
+
+	// The subtree node.
+	subtree = RegisterNodeType("subtree", func() Node { return new(SubtreeNode) }, func() Task { return &subtreeTask{} })
 )
 
 func checkNodeTypes() {

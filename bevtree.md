@@ -6,3 +6,5 @@
 - [x] 生命周期短，创建频率高的对象（agent，task），需要通过对象池进行管理。行为树系统统一管理
 - [x] Env 改名。Runtime 不太合适，运行时虽然也携带数据，具备上下文的属性，但概念更广。直接使用 Context 吧。
 - [x] DataContext 改名，DataCenter？挪回根包下。改为dataSet，类型不导出，导出的接口继承到 Context 中。
+- [x] 实现了测试用subtree结点
+- [ ] Context 之间是否需要共享 DataSet ？。例如 subtree 与 父树（完整的行为树）共享 DataSet

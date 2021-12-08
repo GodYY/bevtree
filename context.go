@@ -13,43 +13,69 @@ type Context interface {
 	// Get user data.
 	UserData() interface{}
 
+	// Get the update serial number.
+	UpdateSeri() uint32
+
 	// Get data-set.
 	DataSet() DataSet
 }
 
 type context struct {
-	updateSeri uint32
-	*dataSet
-	userData interface{}
+	userData     interface{}
+	updateSeri   uint32
+	dataSet      *dataSet
+	dataSetOwner bool
 }
 
 func newContext(userData interface{}) *context {
 	ctx := &context{
-		dataSet:  newDataSet(),
-		userData: userData,
+		userData:     userData,
+		dataSet:      newDataSet(),
+		dataSetOwner: true,
 	}
 
 	return ctx
-}
-
-func (ctx *context) release() {
-	ctx.dataSet.Clear()
-	ctx.dataSet = nil
-	ctx.userData = nil
-}
-
-func (ctx *context) reset() {
-	ctx.updateSeri = 0
-	ctx.dataSet.Clear()
 }
 
 func (ctx *context) UserData() interface{} { return ctx.userData }
 
 func (ctx *context) DataSet() DataSet { return ctx.dataSet }
 
-func (ctx *context) getUpdateSeri() uint32 { return ctx.updateSeri }
+func (ctx *context) UpdateSeri() uint32 { return ctx.updateSeri }
+
+func (ctx *context) release() {
+	if ctx.dataSetOwner {
+		ctx.dataSet.Clear()
+	}
+	ctx.dataSet = nil
+	ctx.userData = nil
+}
+
+func (ctx *context) reset() {
+	ctx.updateSeri = 0
+	if ctx.dataSetOwner {
+		ctx.dataSet.Clear()
+	}
+}
 
 func (ctx *context) update() { ctx.updateSeri++ }
+
+func (ctx *context) clone(independentDataSet bool) *context {
+	cp := &context{
+		userData:   ctx.userData,
+		updateSeri: ctx.updateSeri,
+	}
+
+	if independentDataSet {
+		cp.dataSet = newDataSet()
+		cp.dataSetOwner = true
+	} else {
+		cp.dataSet = ctx.dataSet
+		cp.dataSetOwner = false
+	}
+
+	return cp
+}
 
 // Return a error indicates that the value type of key is not
 // wanted type.
