@@ -5,11 +5,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GodYY/gutils/assert"
 	"github.com/pkg/errors"
 )
 
 // Context interface.
 type Context interface {
+	// Behavior tree framework.
+	Framework() *Framework
+
+	// Behavior tree
+	Tree() *Tree
+
 	// Get user data.
 	UserData() interface{}
 
@@ -21,14 +28,21 @@ type Context interface {
 }
 
 type context struct {
+	framework    *Framework
+	tree         *Tree
 	userData     interface{}
 	updateSeri   uint32
 	dataSet      *dataSet
 	dataSetOwner bool
 }
 
-func newContext(userData interface{}) *context {
+func newContext(framework *Framework, tree *Tree, userData interface{}) *context {
+	assert.Assert(framework != nil, "framework nil")
+	assert.Assert(tree != nil, "tree nil")
+
 	ctx := &context{
+		framework:    framework,
+		tree:         tree,
 		userData:     userData,
 		dataSet:      newDataSet(),
 		dataSetOwner: true,
@@ -36,6 +50,10 @@ func newContext(userData interface{}) *context {
 
 	return ctx
 }
+
+func (ctx *context) Framework() *Framework { return ctx.framework }
+
+func (ctx *context) Tree() *Tree { return ctx.tree }
 
 func (ctx *context) UserData() interface{} { return ctx.userData }
 
@@ -49,6 +67,8 @@ func (ctx *context) release() {
 	}
 	ctx.dataSet = nil
 	ctx.userData = nil
+	ctx.tree = nil
+	ctx.framework = nil
 }
 
 func (ctx *context) reset() {
@@ -60,8 +80,12 @@ func (ctx *context) reset() {
 
 func (ctx *context) update() { ctx.updateSeri++ }
 
-func (ctx *context) clone(independentDataSet bool) *context {
+func (ctx *context) cloneWithTree(tree *Tree, independentDataSet bool) *context {
+	assert.Assert(tree != nil, "tree nil")
+
 	cp := &context{
+		framework:  ctx.framework,
+		tree:       tree,
 		userData:   ctx.userData,
 		updateSeri: ctx.updateSeri,
 	}

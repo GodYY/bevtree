@@ -1,137 +1,21 @@
 package bevtree
 
 import (
-	"fmt"
-	"log"
-	"reflect"
+	"path"
+	"sync"
+	"sync/atomic"
+	"unsafe"
 
 	"github.com/GodYY/gutils/assert"
+	"github.com/pkg/errors"
 )
 
 // Node type.
-type NodeType int8
+type NodeType string
 
-// Node metadata.
-type nodeMETA struct {
-	// Node type name.
-	name string
+func (t NodeType) Valid() bool { return string(t) != "" }
 
-	// Node type value, assigned at registration.
-	typ NodeType
-
-	// The creator of node.
-	creator func() Node
-
-	// task pool, used to cache the destroyed task of this type of node.
-	taskPool *pool
-}
-
-// Use creator to create node.
-func (meta *nodeMETA) createNode() Node { return meta.creator() }
-
-// Create a task of this type of node. First, get a cached task or
-// create a new task. Then, call the OnCreate method of it.
-func (meta *nodeMETA) createTask(node Node) Task {
-	assert.Assert(node != nil, "node nil")
-	task := meta.taskPool.get().(Task)
-	task.OnCreate(node)
-	return task
-}
-
-// Destroy a task of this type of node. First, call the OnDestroy
-// method of the task. Then, put it to be cached to the pool.
-func (meta *nodeMETA) destroyTask(task Task) {
-	task.OnDestroy()
-	meta.taskPool.put(task)
-}
-
-// The mapping of node type name to metadata.
-var nodeName2META = map[string]*nodeMETA{}
-
-// The mapping of node type to metadata.
-var nodeType2META = map[NodeType]*nodeMETA{}
-
-// Get metadata of node type t.
-func getNodeMETAByType(t NodeType) *nodeMETA { return nodeType2META[t] }
-
-func (t NodeType) String() string {
-	return getNodeMETAByType(t).name
-}
-
-// Register a type of node. It create metadata of the type of node,
-// and assigned it a type value.
-func RegisterNodeType(name string, nodeCreator func() Node, taskCreator func() Task) NodeType {
-	assert.NotEqual(name, "", "empty node type name")
-	assert.AssertF(nodeCreator != nil, "node type \"%s\" nodeCreator nil", name)
-	assert.AssertF(taskCreator != nil, "node type \"%s\" taskCreator nil", name)
-	assert.AssertF(nodeName2META[name] == nil, "node type \"%s\" registered", name)
-
-	meta := &nodeMETA{
-		name:     name,
-		typ:      NodeType(len(nodeName2META)),
-		creator:  nodeCreator,
-		taskPool: newPool(func() interface{} { return taskCreator() }),
-	}
-
-	nodeName2META[name] = meta
-	nodeType2META[meta.typ] = meta
-
-	return meta.typ
-}
-
-// The default node types.
-var (
-	// The root node of behavior tree.
-	root = RegisterNodeType("root", func() Node { return newRootNode() }, func() Task { return &rootTask{} })
-
-	// The inverter node.
-	inverter = RegisterNodeType("inverter", func() Node { return NewInverterNode() }, func() Task { return &inverterTask{} })
-
-	// The succeeder node.
-	succeeder = RegisterNodeType("succeeder", func() Node { return NewSucceederNode() }, func() Task { return &succeederTask{} })
-
-	// The repeater node.
-	repeater = RegisterNodeType("repeater", func() Node { return NewRepeaterNode(1) }, func() Task { return &repeaterTask{} })
-
-	// The repeat-until-fail node.
-	repeatUntilFail = RegisterNodeType("repeatuntilfail", func() Node { return NewRepeatUntilFailNode(false) }, func() Task { return &repeatUntilFailTask{} })
-
-	// The sequence node.
-	sequence = RegisterNodeType("sequence", func() Node { return NewSequenceNode() }, func() Task { return &sequenceTask{} })
-
-	// The selector node.
-	selector = RegisterNodeType("selector", func() Node { return NewSelectorNode() }, func() Task { return &selectorTask{} })
-
-	// The random sequence node.
-	randSequence = RegisterNodeType("randsequence", func() Node { return NewRandSequenceNode() }, func() Task { return &randSequenceTask{} })
-
-	// The random selector node.
-	randSelector = RegisterNodeType("randselector", func() Node { return NewRandSelectorNode() }, func() Task { return &randSelectorTask{} })
-
-	// The parallel node.
-	parallel = RegisterNodeType("parallel", func() Node { return NewParallelNode() }, func() Task { return &parallelTask{} })
-
-	// The behavior node.
-	behavior = RegisterNodeType("behavior", func() Node { return NewBevNode(nil) }, func() Task { return &bevTask{} })
-
-	// The subtree node.
-	subtree = RegisterNodeType("subtree", func() Node { return new(SubtreeNode) }, func() Task { return &subtreeTask{} })
-)
-
-func checkNodeTypes() {
-	for _, v := range nodeType2META {
-		node := v.createNode()
-
-		assert.AssertF(node != nil, "node type \"%s\" create nil node", v.name)
-		assert.EqualF(node.NodeType(), v.typ, "node created of type \"%s\" has different type \"%s\"", v.name, node.NodeType().String())
-
-		destroyAgent(createAgent(node))
-	}
-}
-
-func init() {
-	checkNodeTypes()
-}
+func (t NodeType) String() string { return string(t) }
 
 // Node represents the structure portion of behavior tree.
 // Node defines the basic function of node of behavior tree.
@@ -316,355 +200,6 @@ type Task interface {
 	OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result
 }
 
-// agent represents common parts of behavior tree node.
-// agent links Node and Task, maintains status infomation
-// and implements the workflow of behavior tree node.
-// All ruuning agents form a run-time behavior tree.
-type agent struct {
-	// Corresponding Node.
-	node Node
-
-	// Corresponding Task.
-	task Task
-
-	// Parent agent.
-	parent *agent
-
-	// Child agent list.
-	firstChild *agent
-
-	// Previous, next agent.
-	prev, next *agent
-
-	// Store the serial number of the latest updating.
-	latestUpdateSeri uint32
-
-	// Store the current status.
-	st status
-
-	// Store the lazyStop type.
-	lzStop lazyStop
-
-	// agent placeholder int the work queue.
-	elem *element
-}
-
-// onCreate is called immediately after the agent is created.
-func (a *agent) onCreate(node Node, task Task) {
-	a.node = node
-	a.task = task
-	a.latestUpdateSeri = 0
-	a.st = sNone
-	a.lzStop = lzsNone
-}
-
-// onDestroy is called before the agent is destroyed.
-func (a *agent) onDestroy() {
-	a.node = nil
-	a.task = nil
-}
-
-// Indicates whether the agent is persistent. That is the
-// the update method of the agent must be called whenever
-// the behavior tree update before it terminated.
-func (a *agent) isPersistent() bool { return a.task.TaskType() == Single }
-
-func (a *agent) getNext() *agent {
-	if a.parent != nil && a.next != a.parent.firstChild {
-		return a.next
-	}
-	return nil
-}
-
-func (a *agent) getPrev() *agent {
-	if a.parent != nil && a.prev != a.parent.firstChild {
-		return a.prev
-	}
-	return nil
-}
-
-// Add a running child for the agent.
-func (a *agent) addChild(child *agent) {
-	assert.Assert(child != nil && child.parent == nil, "child nil or has parent")
-
-	if a.firstChild == nil {
-		child.prev = child
-		child.next = child
-		a.firstChild = child
-	} else {
-		child.prev = a.firstChild.prev
-		child.next = a.firstChild
-		child.prev.next = child
-		child.next.prev = child
-	}
-
-	child.parent = a
-}
-
-// Remove a child for the agent.
-func (a *agent) removeChild(child *agent) {
-	assert.Assert(child != nil && child.parent == a, "child nil or parent not match")
-
-	if child == a.firstChild && a.firstChild.next == a.firstChild {
-		a.firstChild = nil
-	} else {
-		if child == a.firstChild {
-			a.firstChild = a.firstChild.next
-		}
-
-		child.prev.next = child.next
-		child.next.prev = child.prev
-	}
-
-	child.prev = nil
-	child.next = nil
-	child.parent = nil
-}
-
-func (a *agent) getParent() *agent         { return a.parent }
-func (a *agent) getStatus() status         { return a.st }
-func (a *agent) setStatus(st status)       { a.st = st }
-func (a *agent) getLZStop() lazyStop       { return a.lzStop }
-func (a *agent) setLZStop(lzStop lazyStop) { a.lzStop = lzStop }
-func (a *agent) getElem() *element         { return a.elem }
-func (a *agent) setElem(elem *element)     { a.elem = elem }
-
-// Running logic of the agent.
-func (a *agent) update(entity *entity) Result {
-	if debug {
-		log.Printf("agent nodetype:%v update %v %v", a.node.NodeType(), a.getStatus(), a.getLZStop())
-	}
-
-	st := a.getStatus()
-
-	if debug {
-		assert.NotEqualF(st, sDestroyed, "agent nodetype:%v already destroyed", a.node.NodeType())
-	}
-
-	// Update seri.
-	a.latestUpdateSeri = entity.getUpdateSeri()
-
-	// lazy Stop before Update.
-	lzStop := a.getLZStop()
-	if lzStop == lzsBeforeUpdate {
-		return a.doLazyStop(entity)
-	}
-
-	// init.
-	if st == sNone {
-		if !a.task.OnInit(entity.getChildNodeList(), entity.Context()) {
-			a.task.OnTerminate(entity.Context())
-			a.setStatus(sTerminated)
-			return Failure
-		}
-
-		if debug {
-			switch a.task.TaskType() {
-			case Single:
-				assert.AssertF(entity.getChildNodeList().len() == 0, "node type \"%s\" has children", a.node.NodeType().String())
-
-			case Serial:
-				assert.AssertF(entity.getChildNodeList().len() == 1, "node type \"%s\" have no or more than one child", a.node.NodeType().String())
-
-			case Parallel:
-				assert.AssertF(entity.getChildNodeList().len() > 0, "node type \"%s\" have no children", a.node.NodeType().String())
-			}
-		}
-
-		a.processNextChildren(entity)
-	}
-
-	// Update.
-	result := a.task.OnUpdate(entity.Context())
-
-	// lazy Stop after Update
-	if lzStop == lzsAfterUpdate {
-		return a.doLazyStop(entity)
-	}
-
-	if result == Running {
-		a.setStatus(sRunning)
-	} else {
-		// terminate.
-		a.task.OnTerminate(entity.Context())
-		a.setStatus(sTerminated)
-	}
-
-	return result
-}
-
-// Procoess child nodes filtered by making decision. Child nodes
-// are cached in Context.
-func (a *agent) processNextChildren(entity *entity) {
-	childNodeList := entity.getChildNodeList()
-	for nextChildNode := childNodeList.pop(); nextChildNode != nil; nextChildNode = childNodeList.pop() {
-		childAgent := createAgent(nextChildNode)
-		a.addChild(childAgent)
-		entity.pushAgent(childAgent)
-	}
-}
-
-// If the agent is running, stop it. remove all child agents,
-// notify the task to terminate.
-func (a *agent) stop(ctx *context) {
-	if a.getStatus() != sRunning {
-		return
-	}
-
-	if debug {
-		log.Printf("agent nodetype:%v stop", a.node.NodeType())
-	}
-
-	child := a.firstChild
-	for child != nil {
-		agent := child
-		child = child.getNext()
-		a.removeChild(agent)
-	}
-
-	a.task.OnTerminate(ctx)
-	a.setStatus(sStopped)
-	a.setLZStop(lzsNone)
-}
-
-// Lazy-Stop the agent if it is running and not set with
-// lazy-stop state yet.
-func (a *agent) lazyStop(entity *entity) {
-	if debug {
-		log.Printf("agent nodetype:%v lazyStop", a.node.NodeType())
-	}
-
-	st := a.getStatus()
-	if st == sStopped || st == sTerminated || a.getLZStop() != lzsNone {
-		return
-	}
-
-	if a.latestUpdateSeri != entity.getUpdateSeri() {
-		// Not updated on the latest updating.
-		// Stop after update.
-		a.setLZStop(lzsAfterUpdate)
-	} else {
-		// Updated on the latest updating.
-		// Stop before update.
-		a.setLZStop(lzsBeforeUpdate)
-	}
-
-	// Lazy-Stop need agent to update again.
-	if a.elem == nil || a.getLZStop() == lzsBeforeUpdate {
-		entity.pushAgent(a)
-	}
-}
-
-// The implementation of Lazy-Stop on agent.
-func (a *agent) doLazyStop(entity *entity) Result {
-	a.lazyStopChildren(entity)
-	a.task.OnTerminate(entity.Context())
-	a.setStatus(sStopped)
-	a.setLZStop(lzsNone)
-	return Failure
-}
-
-func (a *agent) lazyStopChildren(entity *entity) {
-	child := a.firstChild
-	for child != nil {
-		child.lazyStop(entity)
-		node := child
-		child = child.getNext()
-		a.removeChild(node)
-	}
-}
-
-// onChildTerminated is called when a child agent is terminated.
-func (a *agent) onChildTerminated(child *agent, result Result, entity *entity) Result {
-	if debug {
-		log.Printf("agent nodetype:%v onChildTerminated %v", a.node.NodeType(), result)
-		assert.Assert(a.task.TaskType() != Single, "shouldnt be singletask")
-		assert.Assert(child.getParent() == a, "invalid child")
-		assert.NotEqual(result, Running, "child terminated with running")
-	}
-
-	// Remove child.
-	a.removeChild(child)
-
-	// Not running, Failure.
-	if a.getStatus() != sRunning {
-		return Failure
-	}
-
-	// Lazy-Stopping, Running.
-	if a.getLZStop() != lzsNone {
-		return Running
-	}
-
-	// Invoke task.OnChildTerminated to make decision.
-	if result = a.task.OnChildTerminated(result, entity.getChildNodeList(), entity.Context()); result == Running {
-		if debug {
-			switch a.task.TaskType() {
-			case Serial:
-				assert.AssertF(entity.getChildNodeList().len() == 1, "node type \"%s\" has no or more than one next child", a.node.NodeType().String())
-
-			case Parallel:
-				assert.AssertF(entity.getChildNodeList().len() == 0, "node type \"%s\" has next children", a.node.NodeType().String())
-			}
-		}
-
-		a.processNextChildren(entity)
-	} else {
-		if debug {
-			assert.AssertF(entity.getChildNodeList().len() == 0, "node type \"%s\" has next children on terminating.", a.node.NodeType())
-		}
-
-		// Lazy-Stop children, avoid nested calls.
-		a.lazyStopChildren(entity)
-
-		a.task.OnTerminate(entity.Context())
-		a.setStatus(sTerminated)
-		a.setLZStop(lzsNone)
-	}
-
-	return result
-}
-
-// The pool to cache destroyed agent.
-var agentPool = newPool(func() interface{} { return &agent{} })
-
-// Create agent using node.
-func createAgent(node Node) *agent {
-	nodeMETA := getNodeMETAByType(node.NodeType())
-	if nodeMETA == nil {
-		panic(fmt.Sprintf("node type %d meta not found, %s", node.NodeType(), reflect.TypeOf(node).Elem().Name()))
-	}
-
-	task := nodeMETA.createTask(node)
-	switch task.TaskType() {
-	case Single, Serial, Parallel:
-	default:
-		panic(fmt.Sprintf("node type \"%s\" create invalid type %d task", node.NodeType().String(), task.TaskType()))
-	}
-
-	agent := agentPool.get().(*agent)
-	agent.onCreate(node, task)
-
-	return agent
-}
-
-// Destroy the agent.
-func destroyAgent(agent *agent) {
-	if debug {
-		assert.AssertF(agent.getElem() == nil, "agent node type \"%s\" still in list on destroy", agent.node.NodeType().String())
-	}
-
-	node := agent.node
-	nodeMETA := getNodeMETAByType(node.NodeType())
-	if nodeMETA == nil {
-		panic(fmt.Sprintf("node type %d meta not found, %s", node.NodeType(), reflect.TypeOf(node).Elem().Name()))
-	}
-
-	nodeMETA.destroyTask(agent.task)
-	agent.onDestroy()
-	agentPool.put(agent)
-}
-
 // Root node, a special node in behavior tree. it has
 // only one child and no parent. It returns result of
 // child directly.
@@ -737,20 +272,178 @@ type Tree struct {
 	root *rootNode
 }
 
-func NewTree() *Tree {
+func NewTree(name string) *Tree {
+	assert.AssertF(name != "", "invalid name \"%s\"", name)
+
 	tree := &Tree{
+		name: name,
 		root: newRootNode(),
 	}
 	return tree
 }
 
-func (t *Tree) Name() string              { return t.name }
-func (t *Tree) SetName(name string)       { t.name = name }
+func (t *Tree) Name() string { return t.name }
+func (t *Tree) SetName(name string) {
+	assert.AssertF(name != "", "invalid name \"%s\"", name)
+	t.name = name
+}
 func (t *Tree) Comment() string           { return t.comment }
 func (t *Tree) SetComment(comment string) { t.comment = comment }
 
 func (t *Tree) Root() *rootNode { return t.root }
 
-func (t *Tree) Clear() {
-	t.root.SetChild(nil)
+type treeAsset struct {
+	entry *TreeEntry
+	once  *sync.Once
+	tree  *Tree
+}
+
+type Framework struct {
+	*meta
+	initialized    bool
+	loadAll        bool
+	configPathRoot string
+	treeAssets     map[string]*treeAsset
+}
+
+func NewFramework() *Framework {
+	return &Framework{
+		meta: newMeta(),
+	}
+}
+
+func (s *Framework) RegsiterNodeType(nodeType NodeType, nodeCreator func() Node, taskCreator func() Task) {
+	if s.initialized {
+		panic("bevtree framework initialized")
+	}
+
+	s.meta.RegisterNodeType(nodeType, nodeCreator, taskCreator)
+}
+
+func (s *Framework) RegisterBevType(bevType BevType, creator func() Bev) {
+	if s.initialized {
+		panic("bevtree framework initialized")
+	}
+	s.meta.RegisterBevType(bevType, creator)
+}
+
+func (s *Framework) Init(cfgPath string) error {
+	if s.initialized {
+		return errors.New("bevtree framework repeated initialization")
+	}
+
+	config, err := LoadConfig(cfgPath)
+	if err != nil {
+		return errors.WithMessagef(err, "bevtree framework init")
+	}
+
+	s.configPathRoot = path.Dir(cfgPath)
+	s.treeAssets = make(map[string]*treeAsset, len(config.TreeEntries))
+	s.loadAll = config.LoadAll
+
+	if len(config.TreeEntries) > 0 {
+		for _, entry := range config.TreeEntries {
+			var ta *treeAsset
+			if s.loadAll {
+				tree := new(Tree)
+				path := path.Join(s.configPathRoot, entry.Path)
+				if err = s.DecodeXMLTreeFile(path, tree); err == nil {
+					if tree.Name() != entry.Name {
+						err = errors.Errorf("load tree \"%s\": name don't match config name \"%s\"", tree.Name(), entry.Name)
+					}
+				}
+
+				if err != nil {
+					return errors.WithMessage(err, "bevtree framework init")
+				}
+
+				ta = &treeAsset{entry: entry, tree: tree}
+			} else {
+				ta = &treeAsset{entry: entry, once: new(sync.Once)}
+			}
+
+			if s.treeAssets[entry.Name] != nil {
+				return errors.Errorf("bevtree framework init: duplcate tree name \"%s\"", entry.Name)
+			}
+
+			s.treeAssets[entry.Name] = ta
+		}
+	}
+
+	s.initialized = true
+
+	return nil
+}
+
+func (s *Framework) loadTree(ta *treeAsset) (*Tree, error) {
+	var err error
+
+	ta.once.Do(func() {
+		tree := new(Tree)
+
+		path := path.Join(s.configPathRoot, ta.entry.Path)
+		if err = s.DecodeXMLTreeFile(path, tree); err != nil {
+			return
+		}
+
+		if tree.Name() != ta.entry.Name {
+			err = errors.Errorf("loadTree \"%s\": tree name don't match config name \"%s\"", tree.Name(), ta.entry.Name)
+		}
+
+		atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&ta.tree)), unsafe.Pointer(tree))
+	})
+
+	if err != nil {
+		return nil, err
+	} else if ta.tree == nil {
+		return nil, errors.Errorf("loadTree \"%s\" failed", ta.entry.Name)
+	} else {
+		return ta.tree, nil
+	}
+}
+
+func (s *Framework) GetOrLoadTree(name string) (*Tree, error) {
+	if !s.initialized {
+		return nil, errors.New("bevtree framework uninitialized")
+	}
+
+	return s.getOrLoadTree(name)
+}
+
+func (s *Framework) getOrLoadTree(name string) (*Tree, error) {
+	ta := s.treeAssets[name]
+	if ta == nil {
+		return nil, nil
+	}
+
+	if s.loadAll {
+		return ta.tree, nil
+	} else {
+		tree := (*Tree)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&ta.tree))))
+		if tree != nil {
+			return tree, nil
+		}
+
+		var err error
+		if tree, err = s.loadTree(ta); err != nil {
+			return nil, errors.WithMessage(err, "bevtree framework GetOrLoadTree")
+		}
+
+		return tree, nil
+	}
+}
+
+func (s *Framework) CreateEntity(treeName string, userData interface{}) (Entity, error) {
+	if !s.initialized {
+		return nil, errors.New("bevtree framework uninitialized")
+	}
+
+	tree, err := s.getOrLoadTree(treeName)
+	if err != nil {
+		return nil, err
+	} else if tree == nil {
+		return nil, errors.Errorf("bevtree framework CreateEntity: tree \"%s\" not exist", treeName)
+	} else {
+		return newEntity(newContext(s, tree, userData)), nil
+	}
 }

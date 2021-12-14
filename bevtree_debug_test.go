@@ -12,45 +12,7 @@ import (
 func TestPool(t *testing.T) {
 	test := newTest()
 
-	paral := NewParallelNode()
-
-	test.tree.Root().SetChild(paral)
-
-	rand.Seed(time.Now().Unix())
-
-	lowUpdate, maxUpdate := 2, 10
-	n := 10
-	lowDepth, maxDepth := 5, 10
-	for i := 0; i < n; i++ {
-		ut := lowUpdate + rand.Intn(maxUpdate-lowUpdate+1)
-		c := DecoratorNode(NewInverterNode())
-		paral.AddChild(c)
-
-		depth := 5 + rand.Intn(maxDepth-lowDepth)
-		for d := 0; d < depth; d++ {
-			cc := NewSucceederNode()
-			c.SetChild(cc)
-			c = cc
-		}
-
-		c.SetChild(NewBevNode(newBehaviorUpdateParams(ut)))
-	}
-
-	test.run(t, Failure, nil, 50)
-	test.close()
-
-	getTotal := _poolDebug.getTotal()
-	putTotal := _poolDebug.putTotal()
-	loseTotal := getTotal - putTotal
-	if loseTotal > 0 {
-		t.Fatalf("get: %d put: %d lose:%d", getTotal, putTotal, loseTotal)
-	} else {
-		t.Logf("get==put: %d", getTotal)
-	}
-}
-
-func TestDebugReset(t *testing.T) {
-	tree := NewTree()
+	tree := test.createTree("test pool")
 
 	paral := NewParallelNode()
 
@@ -73,10 +35,55 @@ func TestDebugReset(t *testing.T) {
 			c = cc
 		}
 
-		c.SetChild(NewBevNode(newBehaviorUpdateParams(ut)))
+		c.SetChild(NewBevNode(newBehaviorUpdate(ut)))
 	}
 
-	e := NewEntity(tree, nil)
+	test.run(t, "test pool", Failure, 50)
+
+	getTotal := _poolDebug.getTotal()
+	putTotal := _poolDebug.putTotal()
+	loseTotal := getTotal - putTotal
+	if loseTotal > 0 {
+		t.Fatalf("get: %d put: %d lose:%d", getTotal, putTotal, loseTotal)
+	} else {
+		t.Logf("get==put: %d", getTotal)
+	}
+}
+
+func TestDebugReset(t *testing.T) {
+	framework := newTestFramework()
+
+	tree := NewTree("test debug reset")
+	framework.addTree(tree)
+
+	paral := NewParallelNode()
+
+	tree.Root().SetChild(paral)
+
+	rand.Seed(time.Now().Unix())
+
+	lowUpdate, maxUpdate := 2, 10
+	n := 10
+	lowDepth, maxDepth := 5, 10
+	for i := 0; i < n; i++ {
+		ut := lowUpdate + rand.Intn(maxUpdate-lowUpdate+1)
+		c := DecoratorNode(NewInverterNode())
+		paral.AddChild(c)
+
+		depth := 5 + rand.Intn(maxDepth-lowDepth)
+		for d := 0; d < depth; d++ {
+			cc := NewSucceederNode()
+			c.SetChild(cc)
+			c = cc
+		}
+
+		c.SetChild(NewBevNode(newBehaviorUpdate(ut)))
+	}
+
+	e, err := framework.CreateEntity("test debug reset", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for i := 0; i < 100; i++ {
 		e.Update()
@@ -94,7 +101,10 @@ func TestDebugReset(t *testing.T) {
 }
 
 func TestEntityFinalizer(t *testing.T) {
-	tree := NewTree()
+	framework := newTestFramework()
+
+	tree := NewTree("test entity finalizer")
+	framework.addTree(tree)
 
 	paral := NewParallelNode()
 
@@ -117,13 +127,17 @@ func TestEntityFinalizer(t *testing.T) {
 			c = cc
 		}
 
-		c.SetChild(NewBevNode(newBehaviorUpdateParams(ut)))
+		c.SetChild(NewBevNode(newBehaviorUpdate(ut)))
 	}
 
 	for i := 0; i < 100; i++ {
-		e := NewEntity(tree, nil)
-		e.Update()
-		e.Stop()
+		entity, err := framework.CreateEntity("test entity finalizer", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		entity.Update()
+		entity.Stop()
 	}
 
 	runtime.GC()

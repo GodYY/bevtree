@@ -14,6 +14,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const indent = "    "
+
 // help function to create xml.Name in namespace bevtree.
 func XMLName(name string) xml.Name {
 	return xml.Name{Space: "", Local: name}
@@ -23,7 +25,7 @@ func XMLName(name string) xml.Name {
 const (
 
 	// xml name for Tree.
-	XMLStringBevTree = "bevtree"
+	XMLStringTree = "bevtree"
 
 	// xml name for name.
 	XMLStringName = "name"
@@ -51,6 +53,11 @@ const (
 
 	// xml name for success on fail.
 	XMLStringSuccessOnFail = "successonfail"
+
+	// xml name for subtree.
+	XMLStringSubtree = "subtree"
+
+	XMLStringConfig = "config"
 )
 
 func XMLNameToString(name xml.Name) string {
@@ -114,14 +121,17 @@ type XMLUnmarshaler interface {
 // An Encoder writes bevtree XML data to an output stream.
 type XMLEncoder struct {
 	*xml.Encoder
+	framework *Framework
 }
 
-// NewXMLEncoder returns a new encoder that writes to w.
-func NewXMLEncoder(w io.Writer) *XMLEncoder {
+// newXMLEncoder returns a new encoder that writes to w.
+func newXMLEncoder(framework *Framework, w io.Writer) *XMLEncoder {
+	assert.Assert(framework != nil, "framework nil")
 	assert.Assert(w != nil, "writer nil")
 
 	return &XMLEncoder{
-		Encoder: xml.NewEncoder(w),
+		Encoder:   xml.NewEncoder(w),
+		framework: framework,
 	}
 }
 
@@ -147,16 +157,18 @@ func (e *XMLEncoder) EncodeElement(v interface{}, start xml.StartElement) error 
 //
 // EncodeSE calls Flush before returning.
 func (e *XMLEncoder) EncodeSE(start xml.StartElement, f func(*XMLEncoder) error) error {
-	if f == nil {
-		return errors.New("f nil")
-	}
+	// if f == nil {
+	// 	return errors.New("f nil")
+	// }
 
 	if err := e.EncodeToken(start); err != nil {
 		return err
 	}
 
-	if err := f(e); err != nil {
-		return err
+	if f != nil {
+		if err := f(e); err != nil {
+			return err
+		}
 	}
 
 	if err := e.EncodeToken(start.End()); err != nil {
@@ -194,7 +206,7 @@ func (e *XMLEncoder) EncodeElementSE(v interface{}, start xml.StartElement) erro
 // ...
 // </end>
 func (e *XMLEncoder) EncodeNode(n Node, start xml.StartElement) error {
-	if ntAttr, err := n.NodeType().MarshalXMLAttr(XMLName(XMLStringNodeType)); err == nil {
+	if ntAttr, err := e.marshalNodeTypeAttr(n.NodeType(), (XMLName(XMLStringNodeType))); err == nil {
 		start.Attr = append(start.Attr, ntAttr)
 	} else {
 		return err
@@ -207,6 +219,24 @@ func (e *XMLEncoder) EncodeNode(n Node, start xml.StartElement) error {
 	return e.EncodeElement(n, start)
 }
 
+// Marshal nodeType as xml.Attr with name.
+func (e *XMLEncoder) marshalNodeTypeAttr(nodeType NodeType, name xml.Name) (xml.Attr, error) {
+	if meta := e.framework.getNodeMeta(nodeType); meta == nil {
+		return xml.Attr{}, errors.Errorf("meta of node type \"%s\" not found", nodeType.String())
+	} else {
+		return xml.Attr{Name: name, Value: nodeType.String()}, nil
+	}
+}
+
+// Marshal bevType as xml.Attr with name.
+func (e *XMLEncoder) marshalBevTypeAttr(bevType BevType, name xml.Name) (xml.Attr, error) {
+	if meta := e.framework.getBevMeta(bevType); meta == nil {
+		return xml.Attr{}, errors.Errorf("meta of bev type \"%s\" not found", bevType.String())
+	} else {
+		return xml.Attr{Name: name, Value: bevType.String()}, nil
+	}
+}
+
 // A XMLDecoder represents an bevtree XML parser reading a particular
 // input stream.
 type XMLDecoder struct {
@@ -214,16 +244,21 @@ type XMLDecoder struct {
 
 	// The cached token for next decoding.
 	tokenCached xml.Token
+
+	// behavior tree system.
+	framework *Framework
 }
 
-// NewXMLDecoder creates a new bevtree XML parser reading from r.
-// If r does not implement io.ByteReader, NewXMLDecoder will
+// newXMLDecoder creates a new bevtree XML parser reading from r.
+// If r does not implement io.ByteReader, newXMLDecoder will
 // do its own buffering.
-func NewXMLDecoder(r io.Reader) *XMLDecoder {
+func newXMLDecoder(framework *Framework, r io.Reader) *XMLDecoder {
+	assert.Assert(framework != nil, "framework nil")
 	assert.Assert(r != nil, "reader nil")
 
 	return &XMLDecoder{
-		Decoder: xml.NewDecoder(r),
+		Decoder:   xml.NewDecoder(r),
+		framework: framework,
 	}
 }
 
@@ -249,6 +284,8 @@ func (d *XMLDecoder) Skip() error {
 
 	return d.Decoder.Skip()
 }
+
+func (d *XMLDecoder) Framework() *Framework { return d.framework }
 
 // DecodeElement read element from start to parse into v.
 func (d *XMLDecoder) DecodeElement(v interface{}, start xml.StartElement) error {
@@ -391,12 +428,10 @@ func (d *XMLDecoder) DecodeNode(start xml.StartElement) (Node, error) {
 	commentXMLName := XMLName(XMLStringComment)
 	var node Node
 	var comment string
-	var err error
 	for _, attr := range start.Attr {
 		if attr.Name == nodeTypeXMLName {
-			var nodeType NodeType
-			if err = nodeType.UnmarshalXMLAttr(attr); err == nil {
-				node = getNodeMETAByType(nodeType).createNode()
+			if nodeType, err := d.unmarshalNodeTypeAttr(attr); err == nil {
+				node = d.framework.getNodeMeta(nodeType).createNode()
 			} else {
 				return nil, XMLTokenError(start, err)
 			}
@@ -451,55 +486,71 @@ func (d *XMLDecoder) DecodeNodeUntil(pnode *Node, name xml.Name, until xml.EndEl
 	})
 }
 
-// marshal t to valid XML attribute.
-func (t NodeType) MarshalXMLAttr(name xml.Name) (xml.Attr, error) {
-	return xml.Attr{Name: name, Value: t.String()}, nil
-}
-
-// unmarshal an XML attribute to t.
-func (t *NodeType) UnmarshalXMLAttr(attr xml.Attr) error {
-	if meta, ok := nodeName2META[attr.Value]; ok {
-		*t = meta.typ
-		return nil
+// Unmarshal xml.Attr attr as NodeType.
+func (d *XMLDecoder) unmarshalNodeTypeAttr(attr xml.Attr) (NodeType, error) {
+	nt := NodeType(attr.Value)
+	if meta := d.framework.getNodeMeta(nt); meta == nil {
+		return NodeType(""), errors.Errorf("meta of node type %s not found", attr.Value)
 	} else {
-		return errors.Errorf("invalid nodeType %s", attr.Value)
+		return nt, nil
 	}
 }
 
-// MarshalXMLBevTree return an bevtree XML encoding of t.
-func MarshalXMLBevTree(t *Tree) ([]byte, error) {
+// Unmarshal xml.Attr attr as BevType.
+func (d *XMLDecoder) unmarshalBevTypeAttr(attr xml.Attr) (BevType, error) {
+	bt := BevType(attr.Value)
+	if meta := d.framework.getBevMeta(bt); meta == nil {
+		return BevType(""), errors.Errorf("meta of bev type %s not found", attr.Value)
+	} else {
+		return bt, nil
+	}
+}
+
+func MarshalXMLTree(framework *Framework, t *Tree) ([]byte, error) {
+	if framework == nil {
+		return nil, errors.New("marshal xml tree: framework nil")
+	}
+
 	if t == nil {
 		return nil, nil
 	}
 
 	var buf = bytes.NewBuffer(nil)
-	e := NewXMLEncoder(buf)
-	e.Indent("", "    ")
+	e := newXMLEncoder(framework, buf)
+	e.Indent("", indent)
 
-	start := xml.StartElement{Name: XMLName(XMLStringBevTree)}
+	start := xml.StartElement{Name: XMLName(XMLStringTree)}
 	if err := e.EncodeElement(t, start); err != nil {
-		return nil, err
+		return nil, errors.WithMessagef(err, "marshal xml tree")
 	}
 
 	return buf.Bytes(), nil
 }
 
-// UnmarshalXMLBevTree parses the bevtree XML-encoded Tree
-// data and stores the result in the Tree pointed to by t.
-func UnmarshalXMLBevTree(data []byte, t *Tree) error {
+func UnmarshalXMLTree(framework *Framework, data []byte, t *Tree) error {
+	if framework == nil {
+		return errors.New("unmarshal xml tree: framework nil")
+	}
+
 	if data == nil || t == nil {
 		return nil
 	}
 
 	var buf = bytes.NewReader(data)
-	d := NewXMLDecoder(buf)
+	d := newXMLDecoder(framework, buf)
 
-	return d.DecodeElementAt(t, XMLName(XMLStringBevTree))
+	if err := d.DecodeElementAt(t, XMLName(XMLStringTree)); err != nil {
+		return errors.WithMessagef(err, "unmarshal xml tree")
+	}
+
+	return nil
 }
 
-// EncodeBevTreeXMLFile works like MarshalXMLBevTree but write
-// encoded data to file.
-func EncodeBevTreeXMLFile(path string, t *Tree) (err error) {
+func EncodeXMLTreeFile(framework *Framework, path string, t *Tree) (err error) {
+	if framework == nil {
+		return errors.New("encode xml tree file: framework nil")
+	}
+
 	if t == nil {
 		return nil
 	}
@@ -517,20 +568,22 @@ func EncodeBevTreeXMLFile(path string, t *Tree) (err error) {
 		}
 	}()
 
-	enc := NewXMLEncoder(file)
-	enc.Indent("", "    ")
+	enc := newXMLEncoder(framework, file)
+	enc.Indent("", indent)
 
-	start := xml.StartElement{Name: XMLName(XMLStringBevTree)}
+	start := xml.StartElement{Name: XMLName(XMLStringTree)}
 	if err := enc.EncodeElement(t, start); err != nil {
-		return err
+		return errors.WithMessagef(err, "encode xml tree file: \"%s\"", path)
 	}
 
 	return nil
 }
 
-// DecodeBevTreeXMLFile works like UnmarshalXMLBevTree but read
-// encoded data from file.
-func DecodeBevTreeXMLFile(path string, t *Tree) error {
+func DecodeXMLTreeFile(framework *Framework, path string, t *Tree) error {
+	if framework == nil {
+		return errors.New("decode xml tree file: framework nil")
+	}
+
 	if t == nil {
 		return nil
 	}
@@ -541,14 +594,61 @@ func DecodeBevTreeXMLFile(path string, t *Tree) error {
 	}
 	defer file.Close()
 
-	dec := NewXMLDecoder(file)
+	dec := newXMLDecoder(framework, file)
 
-	return dec.DecodeElementAt(t, XMLName(XMLStringBevTree))
+	if err := dec.DecodeElementAt(t, XMLName(XMLStringTree)); err != nil {
+		return errors.WithMessagef(err, "decode xml tree file: \"%s\"", path)
+	}
+
+	return nil
+}
+
+// MarshalXMLTree return an bevtree XML encoding of t.
+func (f *Framework) MarshalXMLTree(t *Tree) ([]byte, error) {
+	if data, err := MarshalXMLTree(f, t); err != nil {
+		return nil, errors.WithMessage(err, "framework")
+	} else {
+		return data, nil
+	}
+}
+
+// UnmarshalXMLTree parses the bevtree XML-encoded Tree
+// data and stores the result in the Tree pointed to by t.
+func (f *Framework) UnmarshalXMLTree(data []byte, t *Tree) error {
+	if err := UnmarshalXMLTree(f, data, t); err != nil {
+		return errors.WithMessage(err, "framework")
+	} else {
+		return nil
+	}
+}
+
+// EncodeXMLTreeFile works like MarshalXMLTree but write
+// encoded data to file.
+func (f *Framework) EncodeXMLTreeFile(path string, t *Tree) (err error) {
+	if err := EncodeXMLTreeFile(f, path, t); err != nil {
+		return errors.WithMessage(err, "framework")
+	} else {
+		return nil
+	}
+}
+
+// DecodeXMLTreeFile works like UnmarshalXMLTree but read
+// encoded data from file.
+func (f *Framework) DecodeXMLTreeFile(path string, t *Tree) error {
+	if err := DecodeXMLTreeFile(f, path, t); err != nil {
+		return errors.WithMessage(err, "framework")
+	} else {
+		return nil
+	}
 }
 
 func (t *Tree) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 	if debug {
 		log.Printf("Tree.MarshalBTXML start:%v", start)
+	}
+
+	if t.name == "" {
+		return errors.New("Tree has no name")
 	}
 
 	if t.name != "" {
@@ -586,12 +686,17 @@ func (t *Tree) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 		}
 	}
 
-	root := newRootNode()
-	if err := d.DecodeElementAt(root, XMLName(XMLStringRoot)); err != nil {
-		return errors.WithMessagef(err, "Tree %s Unmarshal root", XMLTokenToString(start))
+	if t.name == "" {
+		return errors.New("tree has no name")
 	}
 
-	t.root = root
+	if t.root == nil {
+		t.root = newRootNode()
+	}
+
+	if err := d.DecodeElementAt(t.root, XMLName(XMLStringRoot)); err != nil {
+		return errors.WithMessagef(err, "Tree %s Unmarshal root", XMLTokenToString(start))
+	}
 
 	return d.Skip()
 }
@@ -1030,42 +1135,27 @@ func (p *ParallelNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) err
 	return d.Skip()
 }
 
-func (t BevType) MarshalXMLAttr(name xml.Name) (xml.Attr, error) {
-	return xml.Attr{Name: name, Value: t.String()}, nil
-}
-
-func (t *BevType) UnmarshalXMLAttr(attr xml.Attr) error {
-	if meta, ok := bevName2META[attr.Value]; ok {
-		*t = meta.typ
-		return nil
-	} else {
-		return fmt.Errorf("invalid BevType %s", attr.Value)
-	}
-}
-
 func (b *BevNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 	if debug {
 		log.Printf("BevNode.MarshalBTXML start:%v", start)
 	}
 
-	if b.bevParams != nil {
-		var err error
-		var bevTypeAttr xml.Attr
-		if bevTypeAttr, err = b.bevParams.BevType().MarshalXMLAttr(XMLName(XMLStringBevType)); err == nil {
-			start.Attr = append(start.Attr, bevTypeAttr)
+	var err error
+	var bevTypeAttr xml.Attr
+	if bevTypeAttr, err = e.marshalBevTypeAttr(b.bev.BevType(), XMLName(XMLStringBevType)); err == nil {
+		start.Attr = append(start.Attr, bevTypeAttr)
 
-			switch o := b.bevParams.(type) {
-			case XMLMarshaler:
-				err = o.MarshalBTXML(e, start)
-			default:
-				err = e.Encoder.EncodeElement(b.bevParams, start)
-			}
-
+		switch o := b.bev.(type) {
+		case XMLMarshaler:
+			err = o.MarshalBTXML(e, start)
+		default:
+			err = e.Encoder.EncodeElement(b.bev, start)
 		}
 
-		if err != nil {
-			return errors.WithMessagef(err, "BevNode %s Marshal", XMLTokenToString(start))
-		}
+	}
+
+	if err != nil {
+		return errors.WithMessagef(err, "BevNode %s Marshal", XMLTokenToString(start))
 	}
 
 	return nil
@@ -1077,15 +1167,15 @@ func (b *BevNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 	}
 
 	var err error
-	var bevParams BevParams
+	var bev Bev
 
 	xmlNameBevType := XMLName(XMLStringBevType)
 	for _, attr := range start.Attr {
 		if attr.Name == xmlNameBevType {
 			var bevType BevType
-			if err = bevType.UnmarshalXMLAttr(attr); err == nil {
-				bevParams = getBevMETAByType(bevType).createParams()
-				err = d.DecodeElement(bevParams, start)
+			if bevType, err = d.unmarshalBevTypeAttr(attr); err == nil {
+				bev = d.Framework().getBevMeta(bevType).create()
+				err = d.DecodeElement(bev, start)
 			}
 
 			break
@@ -1093,11 +1183,51 @@ func (b *BevNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 	}
 
 	if err != nil {
-		return errors.WithMessagef(err, "BevNode %s Unmarshal", start)
-	} else if bevParams != nil {
-		b.bevParams = bevParams
-		return nil
+		return errors.WithMessagef(err, "BevNode %s Unmarshal", XMLTokenToString(start))
+	} else if bev == nil {
+		return errors.Errorf("BevNode %s Unmarshal: no bev", XMLTokenToString(start))
 	} else {
-		return d.Skip()
+		b.bev = bev
+		return nil
 	}
+}
+
+func (s *SubtreeNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
+	if debug {
+		log.Printf("SubtreeNode.MarshalBTXML start:%v", start)
+	}
+
+	start.Attr = append(start.Attr, xml.Attr{Name: XMLName(XMLStringSubtree), Value: s.subtree.Name()})
+
+	if err := e.EncodeSE(start, nil); err != nil {
+		return errors.WithMessagef(err, "SubtreeNode %s Marshal", XMLTokenToString(start))
+	}
+
+	return nil
+}
+
+func (s *SubtreeNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
+	if debug {
+		log.Printf("SubtreeNode.UnmarshalBTXML start:%v", start)
+	}
+
+	for _, attr := range start.Attr {
+		if attr.Name == XMLName(XMLStringSubtree) {
+			subtree, err := d.Framework().getOrLoadTree(attr.Value)
+			if err != nil {
+				return errors.WithMessagef(err, "SubtreeNode %s Unmarshal", XMLTokenToString(start))
+			} else if subtree == nil {
+				return errors.Errorf("SubtreeNode %s Unmarshal: subtree \"%s\" not exsit", XMLTokenToString(start), attr.Value)
+			} else {
+				s.subtree = subtree
+				break
+			}
+		}
+	}
+
+	if s.subtree == nil {
+		return errors.Errorf("SubtreeNode %s Unmarshal: attr subtree not exist", XMLTokenToString(start))
+	}
+
+	return d.Skip()
 }

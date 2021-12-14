@@ -4,14 +4,21 @@ import (
 	"github.com/GodYY/gutils/assert"
 )
 
+// Subtree node is a kind of leaf node, used to run a subtree
+// for reducing complexity.
 type SubtreeNode struct {
 	node
-	subtree            *Tree
+
+	// The subtree.
+	subtree *Tree
+
+	// Whether to create a independent dataset. If set to true,
+	// the behavior tree do not share dataset with subtree.
 	independentDataSet bool
 }
 
 func NewSubtreeNode(subtree *Tree, independentDataSet bool) *SubtreeNode {
-	assert.Assert(subtree != nil, "subtree inil")
+	assert.Assert(subtree != nil, "subtree nil")
 	return &SubtreeNode{
 		node:               newNode(),
 		subtree:            subtree,
@@ -23,7 +30,10 @@ func (s *SubtreeNode) NodeType() NodeType { return subtree }
 
 func (s *SubtreeNode) Subtree() *Tree { return s.subtree }
 
-func (s *SubtreeNode) SetSubtree(subtree *Tree) { s.subtree = subtree }
+func (s *SubtreeNode) SetSubtree(subtree *Tree) {
+	assert.Assert(subtree != nil, "subtree nil")
+	s.subtree = subtree
+}
 
 func (s *SubtreeNode) IndependentDataSet() bool { return s.independentDataSet }
 
@@ -51,12 +61,8 @@ func (s *subtreeTask) OnDestroy() { s.node = nil }
 // to run next. ctx represents the running context of the
 // behavior tree.
 func (s *subtreeTask) OnInit(_ NodeList, ctx Context) bool {
-	if s.node.Subtree() == nil {
-		return false
-	} else {
-		s.entity = newEntity(s.node.Subtree(), ctx.(*context).clone(s.node.independentDataSet))
-		return true
-	}
+	s.entity = newEntity(ctx.(*context).cloneWithTree(s.node.subtree, s.node.independentDataSet))
+	return true
 }
 
 // OnUpdate is called until the Task is terminated.

@@ -2,74 +2,109 @@ package bevtree
 
 import (
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/GodYY/gutils/assert"
+	"github.com/pkg/errors"
 )
 
-var (
-	btFunc   = RegisterBevType("func", func() Bev { return new(bevFunc) }, func() BevParams { return new(bevFuncParams) })
-	btIncr   = RegisterBevType("incr", func() Bev { return new(behaviorIncr) }, func() BevParams { return new(behaviorIncrParams) })
-	btUpdate = RegisterBevType("update", func() Bev { return new(behaviorUpdate) }, func() BevParams { return new(behaviorUpdateParams) })
+func (s *Framework) addTree(tree *Tree) {
+	if !s.initialized {
+		panic(errors.New("bevtree framework uninitialized"))
+	}
+
+	if s.treeAssets == nil {
+		s.treeAssets = make(map[string]*treeAsset)
+	}
+
+	_, ok := s.treeAssets[tree.Name()]
+	assert.AssertF(!ok, "tree named \"%s\" already exist", tree.Name())
+
+	var ta *treeAsset
+	if s.loadAll {
+		ta = &treeAsset{
+			entry: &TreeEntry{Name: tree.Name()},
+			tree:  tree,
+		}
+	} else {
+		ta = &treeAsset{
+			entry: &TreeEntry{Name: tree.Name()},
+			once:  new(sync.Once),
+			tree:  tree,
+		}
+	}
+
+	s.treeAssets[tree.Name()] = ta
+}
+
+const (
+	function       = BevType("func")
+	increase       = BevType("incr")
+	update         = BevType("update")
+	blackboardIncr = BevType("blackboardIncr")
 )
 
-type bevFuncParams struct {
+type bevFunc struct {
 	f func(Context) Result
 }
 
-func newBevFuncParams(f func(Context) Result) *bevFuncParams {
-	return &bevFuncParams{f: f}
+func newBevFunc(f func(Context) Result) *bevFunc {
+	return &bevFunc{f: f}
 }
 
-func (bevFuncParams) BevType() BevType { return btFunc }
+func (bevFunc) BevType() BevType { return function }
 
-type bevFunc struct {
-	*bevFuncParams
+func (b *bevFunc) CreateBev() BevEntity {
+	return &bevFuncEntity{f: b.f}
 }
 
-func (b *bevFunc) BevType() BevType { return btFunc }
+func (b *bevFunc) DestroyBev(BevEntity) {}
 
-func (b *bevFunc) OnCreate(params BevParams) {
-	b.bevFuncParams = params.((*bevFuncParams))
+type bevFuncEntity struct {
+	f func(Context) Result
 }
 
-func (b *bevFunc) OnDestroy() {}
+func (b *bevFuncEntity) BevType() BevType { return function }
 
-func (b *bevFunc) OnInit(e Context) bool { return true }
+func (b *bevFuncEntity) OnInit(e Context) bool { return true }
 
-func (b *bevFunc) OnUpdate(e Context) Result {
+func (b *bevFuncEntity) OnUpdate(e Context) Result {
 	// fmt.Println("behaviorFunc OnUpdate")
 	return b.f(e)
 }
 
-func (b *bevFunc) OnTerminate(e Context) {
+func (b *bevFuncEntity) OnTerminate(e Context) {
 }
 
-type behaviorIncrParams struct {
+type behaviorIncr struct {
 	key     string
 	limited int
 }
 
-func newBehaviorIncrParams(key string, limited int) *behaviorIncrParams {
-	return &behaviorIncrParams{key: key, limited: limited}
+func newBehaviorIncr(key string, limited int) *behaviorIncr {
+	return &behaviorIncr{key: key, limited: limited}
 }
 
-func (behaviorIncrParams) BevType() BevType { return btIncr }
+func (behaviorIncr) BevType() BevType { return increase }
 
-type behaviorIncr struct {
-	*behaviorIncrParams
+func (b *behaviorIncr) CreateBev() BevEntity {
+	return &behaviorIncrEntity{behaviorIncr: b}
+}
+
+func (b *behaviorIncr) DestroyBev(BevEntity) {}
+
+type behaviorIncrEntity struct {
+	*behaviorIncr
 	count int
 }
 
-func (b *behaviorIncr) BevType() BevType { return btIncr }
-func (b *behaviorIncr) OnCreate(params BevParams) {
-	b.behaviorIncrParams = params.(*behaviorIncrParams)
-	b.count = 0
-}
-func (b *behaviorIncr) OnDestroy() {}
+func (b *behaviorIncrEntity) BevType() BevType { return increase }
 
-func (b *behaviorIncr) OnInit(e Context) bool { return true }
+func (b *behaviorIncrEntity) OnInit(e Context) bool { return true }
 
-func (b *behaviorIncr) OnUpdate(e Context) Result {
+func (b *behaviorIncrEntity) OnUpdate(e Context) Result {
 	if b.count >= b.limited {
 		return Failure
 	}
@@ -83,35 +118,34 @@ func (b *behaviorIncr) OnUpdate(e Context) Result {
 	return Running
 }
 
-func (b *behaviorIncr) OnTerminate(e Context) { b.count = 0 }
+func (b *behaviorIncrEntity) OnTerminate(e Context) { b.count = 0 }
 
-type behaviorUpdateParams struct {
+type behaviorUpdate struct {
 	limited int
 }
 
-func newBehaviorUpdateParams(lmited int) *behaviorUpdateParams {
-	return &behaviorUpdateParams{limited: lmited}
+func newBehaviorUpdate(lmited int) *behaviorUpdate {
+	return &behaviorUpdate{limited: lmited}
 }
 
-func (behaviorUpdateParams) BevType() BevType { return btUpdate }
+func (behaviorUpdate) BevType() BevType { return update }
 
-type behaviorUpdate struct {
-	*behaviorUpdateParams
+func (b *behaviorUpdate) CreateBev() BevEntity {
+	return &behaviorUpdateEntity{behaviorUpdate: b}
+}
+
+func (b *behaviorUpdate) DestroyBev(BevEntity) {}
+
+type behaviorUpdateEntity struct {
+	*behaviorUpdate
 	count int
 }
 
-func (b *behaviorUpdate) BevType() BevType { return btUpdate }
+func (b *behaviorUpdateEntity) BevType() BevType { return update }
 
-func (b *behaviorUpdate) OnCreate(params BevParams) {
-	b.behaviorUpdateParams = params.(*behaviorUpdateParams)
-	b.count = 0
-}
+func (b *behaviorUpdateEntity) OnInit(e Context) bool { return true }
 
-func (b *behaviorUpdate) OnDestroy() {}
-
-func (b *behaviorUpdate) OnInit(e Context) bool { return true }
-
-func (b *behaviorUpdate) OnUpdate(e Context) Result {
+func (b *behaviorUpdateEntity) OnUpdate(e Context) Result {
 	if b.count >= b.limited {
 		return Success
 	}
@@ -124,21 +158,97 @@ func (b *behaviorUpdate) OnUpdate(e Context) Result {
 	return Running
 }
 
-func (b *behaviorUpdate) OnTerminate(e Context) { b.count = 0 }
+func (b *behaviorUpdateEntity) OnTerminate(e Context) { b.count = 0 }
+
+func init() {
+
+}
+
+type bevBBIncr struct {
+	Key     string
+	Limited int
+}
+
+func newBevBBIncr(key string, limited int) *bevBBIncr {
+	return &bevBBIncr{
+		Key:     key,
+		Limited: limited,
+	}
+}
+
+func (bevBBIncr) BevType() BevType { return blackboardIncr }
+
+func (b *bevBBIncr) CreateBev() BevEntity {
+	return &bevBBIncrEntity{bevBBIncr: b}
+}
+
+func (b *bevBBIncr) DestroyBev(BevEntity) {}
+
+type bevBBIncrEntity struct {
+	*bevBBIncr
+	count int
+}
+
+func (b *bevBBIncrEntity) BevType() BevType      { return blackboardIncr }
+func (b *bevBBIncrEntity) OnInit(_ Context) bool { return true }
+
+func (b *bevBBIncrEntity) OnUpdate(e Context) Result {
+	e.DataSet().IncInt(b.Key)
+	b.count++
+
+	if b.count >= b.Limited {
+		return Success
+	} else {
+		return Running
+	}
+
+}
+
+func (b *bevBBIncrEntity) OnTerminate(_ Context) {}
+
+func newTestFramework() *Framework {
+	framework := NewFramework()
+	framework.RegisterBevType(function, func() Bev { return new(bevFunc) })
+	framework.RegisterBevType(increase, func() Bev { return new(behaviorIncr) })
+	framework.RegisterBevType(update, func() Bev { return new(behaviorUpdate) })
+	framework.RegisterBevType(blackboardIncr, func() Bev { return &bevBBIncr{} })
+	framework.initialized = true
+	framework.loadAll = true
+	return framework
+}
 
 type test struct {
-	tree   *Tree
-	entity Entity
+	framework *Framework
 }
 
 func newTest() *test {
 	t := new(test)
-	t.tree = NewTree()
-	t.entity = NewEntity(t.tree, nil)
+	t.framework = newTestFramework()
 	return t
 }
 
-func (t *test) run(tt *testing.T, expectedResult Result, expectedKeyValues map[string]interface{}, tick int) {
+func (t *test) createTree(name string) *Tree {
+	tree := NewTree(name)
+	t.framework.addTree(tree)
+	return tree
+}
+
+type keyValue struct {
+	key      string
+	def      interface{}
+	expected interface{}
+}
+
+func (t *test) run(tt *testing.T, tree string, expectedResult Result, tick int, expectedKeyValues ...keyValue) {
+	entity, err := t.framework.CreateEntity(tree, nil)
+	if err != nil {
+		tt.Fatalf("create entity: %s", err)
+	}
+
+	for _, v := range expectedKeyValues {
+		entity.Context().DataSet().Set(v.key, v.def)
+	}
+
 	result := Running
 
 	for i := 0; i < tick; i++ {
@@ -148,7 +258,7 @@ func (t *test) run(tt *testing.T, expectedResult Result, expectedKeyValues map[s
 		for result == Running {
 			tt.Log("run", i, "update", k)
 			k++
-			result = t.entity.Update()
+			result = entity.Update()
 			time.Sleep(1 * time.Millisecond)
 		}
 		tt.Log("run", i, "end", result)
@@ -158,65 +268,59 @@ func (t *test) run(tt *testing.T, expectedResult Result, expectedKeyValues map[s
 		tt.Fatalf("should return %v but get %v", expectedResult, result)
 	}
 
-	for k, v := range expectedKeyValues {
-		if t.entity.Context().DataSet().Get(k) != v {
-			tt.Fatalf("%s = %v(%v)", k, t.entity.Context().DataSet().Get(k), v)
+	for _, v := range expectedKeyValues {
+		if entity.Context().DataSet().Get(v.key) != v.expected {
+			tt.Fatalf("%s = %v(%v)", v.key, entity.Context().DataSet().Get(v.key), v.expected)
 		}
 	}
-}
 
-func (t *test) clear() {
-	t.tree = nil
-	t.entity = nil
-}
-
-func (t *test) close() {
-	t.entity.Stop()
-	t.entity.Release()
-	t.entity = nil
-	t.tree = nil
+	entity.Release()
 }
 
 func TestRoot(t *testing.T) {
 	test := newTest()
-	test.run(t, Failure, nil, 1)
+	test.createTree("test root")
+	test.run(t, "test root", Failure, 1)
 }
 
 func TestSequence(t *testing.T) {
 	test := newTest()
 
+	tree := test.createTree("test sequence")
+
 	seq := NewSequenceNode()
 
-	test.tree.Root().SetChild(seq)
+	tree.Root().SetChild(seq)
 
 	key := "counter"
-	test.entity.Context().DataSet().SetInt(key, 0)
 	n := 2
 	for i := 0; i < n; i++ {
-		seq.AddChild(NewBevNode(newBevFuncParams(func(e Context) Result {
+		seq.AddChild(NewBevNode(newBevFunc(func(e Context) Result {
 			e.DataSet().IncInt(key)
 			return Success
 		})))
 	}
 
-	test.run(t, Success, map[string]interface{}{key: n}, 1)
+	test.run(t, "test sequence", Success, 1, keyValue{key: "counter", def: 0, expected: 2})
 }
 
 func TestSelector(t *testing.T) {
 	test := newTest()
 
+	tree := test.createTree("test selector")
+
 	selc := NewSelectorNode()
 
-	test.tree.Root().SetChild(selc)
+	tree.Root().SetChild(selc)
 
 	key := "selected"
 	var selected int
 	n := 10
 	for i := 0; i < n; i++ {
 		k := i
-		selc.AddChild(NewBevNode(newBevFuncParams((func(e Context) Result {
+		selc.AddChild(NewBevNode(newBevFunc((func(e Context) Result {
 			if k == selected {
-				test.entity.Context().DataSet().SetInt(key, selected)
+				e.DataSet().SetInt(key, selected)
 				return Success
 			} else {
 				return Failure
@@ -227,7 +331,7 @@ func TestSelector(t *testing.T) {
 	rand.Seed(time.Now().Unix())
 	selected = rand.Intn(n)
 
-	test.run(t, Success, map[string]interface{}{key: selected}, 1)
+	test.run(t, "test selector", Success, 1, keyValue{key: key, def: -1, expected: selected})
 }
 
 func TestRandomSequence(t *testing.T) {
@@ -235,23 +339,24 @@ func TestRandomSequence(t *testing.T) {
 
 	test := newTest()
 
+	tree := test.createTree("test random sequence")
+
 	seq := NewRandSequenceNode()
 
-	test.tree.Root().SetChild(seq)
+	tree.Root().SetChild(seq)
 
 	key := "counter"
-	test.entity.Context().DataSet().SetInt(key, 0)
 	n := 2
 	for i := 0; i < n; i++ {
 		k := i
-		seq.AddChild(NewBevNode(newBevFuncParams(func(e Context) Result {
+		seq.AddChild(NewBevNode(newBevFunc(func(e Context) Result {
 			t.Log("seq", k, "update")
 			e.DataSet().IncInt(key)
 			return Success
 		})))
 	}
 
-	test.run(t, Success, map[string]interface{}{key: n}, 1)
+	test.run(t, "test random sequence", Success, 1, keyValue{key: key, def: 0, expected: n})
 }
 
 func TestRandomSelector(t *testing.T) {
@@ -259,19 +364,21 @@ func TestRandomSelector(t *testing.T) {
 
 	test := newTest()
 
+	tree := test.createTree("test random selector")
+
 	selc := NewRandSelectorNode()
 
-	test.tree.Root().SetChild(selc)
+	tree.Root().SetChild(selc)
 
 	key := "selected"
 	var selected int
 	n := 10
 	for i := 0; i < n; i++ {
 		k := i
-		selc.AddChild(NewBevNode(newBevFuncParams((func(e Context) Result {
+		selc.AddChild(NewBevNode(newBevFunc((func(e Context) Result {
 			t.Log("seq", k, "update")
 			if k == selected {
-				test.entity.Context().DataSet().SetInt(key, selected)
+				e.DataSet().SetInt(key, selected)
 				return Success
 			} else {
 				return Failure
@@ -282,15 +389,17 @@ func TestRandomSelector(t *testing.T) {
 	rand.Seed(time.Now().Unix())
 	selected = rand.Intn(n)
 
-	test.run(t, Success, map[string]interface{}{key: selected}, 1)
+	test.run(t, "test random selector", Success, 1, keyValue{key: key, def: -1, expected: selected})
 }
 
 func TestParallel(t *testing.T) {
 	test := newTest()
 
+	tree := test.createTree("test parallel")
+
 	paral := NewParallelNode()
 
-	test.tree.Root().SetChild(paral)
+	tree.Root().SetChild(paral)
 
 	rand.Seed(time.Now().Unix())
 
@@ -298,7 +407,7 @@ func TestParallel(t *testing.T) {
 	for i := 0; i < n; i++ {
 		k := i + 1
 		timer := time.NewTimer(1000 * time.Millisecond * time.Duration(k))
-		paral.AddChild(NewBevNode(newBevFuncParams(func(e Context) Result {
+		paral.AddChild(NewBevNode(newBevFunc(func(e Context) Result {
 			select {
 			case <-timer.C:
 				t.Logf("timer No.%d up", k)
@@ -310,15 +419,17 @@ func TestParallel(t *testing.T) {
 		})))
 	}
 
-	test.run(t, Success, nil, 1)
+	test.run(t, "test parallel", Success, 1)
 }
 
 func TestParallelLazyStop(t *testing.T) {
 	test := newTest()
 
+	tree := test.createTree("test parallel lazy stop")
+
 	paral := NewParallelNode()
 
-	test.tree.Root().SetChild(paral)
+	tree.Root().SetChild(paral)
 
 	rand.Seed(time.Now().Unix())
 
@@ -338,7 +449,7 @@ func TestParallelLazyStop(t *testing.T) {
 			c = cc
 		}
 
-		c.SetChild(NewBevNode(newBevFuncParams(func(e Context) Result {
+		c.SetChild(NewBevNode(newBevFunc(func(e Context) Result {
 			t.Logf("No.%d update", k)
 			ut--
 			if ut <= 0 {
@@ -350,61 +461,68 @@ func TestParallelLazyStop(t *testing.T) {
 		})))
 	}
 
-	test.run(t, Failure, nil, 1)
+	test.run(t, "test parallel lazy stop", Failure, 1)
 }
 
 func TestRepeater(t *testing.T) {
 	test := newTest()
 
+	tree := test.createTree("test repeater")
+
 	n := 10
 	repeater := NewRepeaterNode(n)
 
-	test.tree.Root().SetChild(repeater)
+	tree.Root().SetChild(repeater)
 
 	key := "counter"
-	test.entity.Context().DataSet().SetInt(key, 0)
 
-	repeater.SetChild(NewBevNode(newBevFuncParams((func(e Context) Result {
+	repeater.SetChild(NewBevNode(newBevFunc((func(e Context) Result {
 		e.DataSet().IncInt(key)
 		return Success
 	}))))
 
-	test.run(t, Success, map[string]interface{}{key: n}, 1)
+	test.run(t, "test repeater", Success, 1, keyValue{key: key, def: 0, expected: n})
 }
 
 func TestInverter(t *testing.T) {
 	test := newTest()
 
+	tree := test.createTree("test inverter")
+
 	inverter := NewInverterNode()
 
-	test.tree.Root().SetChild(inverter)
+	tree.Root().SetChild(inverter)
 
-	inverter.SetChild(NewBevNode(newBevFuncParams(func(e Context) Result {
+	inverter.SetChild(NewBevNode(newBevFunc(func(e Context) Result {
 		return Failure
 	})))
 
-	test.run(t, Success, nil, 1)
+	test.run(t, "test inverter", Success, 1)
 }
 
 func TestSucceeder(t *testing.T) {
 	test := newTest()
 
+	tree := test.createTree("test succeeder")
+
 	succeeder := NewSucceederNode()
-	test.tree.Root().SetChild(succeeder)
+	tree.Root().SetChild(succeeder)
 
-	succeeder.SetChild(NewBevNode(newBevFuncParams(func(e Context) Result { return Failure })))
+	succeeder.SetChild(NewBevNode(newBevFunc(func(e Context) Result { return Failure })))
 
-	test.run(t, Success, nil, 1)
+	test.run(t, "test succeeder", Success, 1)
 }
 
 func TestRepeatUntilFail(t *testing.T) {
 	test := newTest()
 
+	tree := test.createTree("test repeat until fail")
+
 	repeat := NewRepeatUntilFailNode(false)
-	test.tree.Root().SetChild(repeat)
+	tree.Root().SetChild(repeat)
 
 	n := 4
-	repeat.SetChild(NewBevNode(newBevFuncParams(func(e Context) Result {
+	repeat.SetChild(NewBevNode(newBevFunc(func(e Context) Result {
 		t.Log("decr 1")
 
 		n--
@@ -416,12 +534,15 @@ func TestRepeatUntilFail(t *testing.T) {
 		return Success
 	})))
 
-	test.run(t, Failure, nil, 1)
+	test.run(t, "test repeat until fail", Failure, 1)
 }
 
 func TestShareTree(t *testing.T) {
+	framework := newTestFramework()
 
-	tree := NewTree()
+	tree := NewTree("test share tree")
+	framework.addTree(tree)
+
 	paral := NewParallelNode()
 	tree.Root().SetChild(paral)
 
@@ -439,13 +560,17 @@ func TestShareTree(t *testing.T) {
 		singleSum += limited
 		t.Logf("singleSum add %d to %d", limited, singleSum)
 
-		paral.AddChild(NewBevNode(newBehaviorIncrParams(key, limited)))
+		paral.AddChild(NewBevNode(newBehaviorIncr(key, limited)))
 	}
 
 	entities := make([]Entity, numEntities)
 	for i := 0; i < numEntities; i++ {
-		entities[i] = NewEntity(tree, nil)
-		entities[i].Context().DataSet().SetInt(key, 0)
+		if entity, err := framework.CreateEntity("test share tree", nil); err == nil {
+			entities[i] = entity
+			entities[i].Context().DataSet().SetInt(key, 0)
+		} else {
+			t.Fatal(err)
+		}
 	}
 
 	result := Running
@@ -480,7 +605,10 @@ func TestShareTree(t *testing.T) {
 }
 
 func TestReset(t *testing.T) {
-	tree := NewTree()
+	framework := newTestFramework()
+
+	tree := NewTree("test reset")
+	framework.addTree(tree)
 
 	paral := NewParallelNode()
 
@@ -503,10 +631,13 @@ func TestReset(t *testing.T) {
 			c = cc
 		}
 
-		c.SetChild(NewBevNode(newBehaviorUpdateParams(ut)))
+		c.SetChild(NewBevNode(newBehaviorUpdate(ut)))
 	}
 
-	e := NewEntity(tree, nil)
+	e, err := framework.CreateEntity("test reset", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for i := 0; i < 100; i++ {
 		e.Update()
@@ -522,11 +653,15 @@ func TestRemoveChild(t *testing.T) {
 
 	rand.Seed(time.Now().UnixNano())
 
-	tree := NewTree()
+	framework := newTestFramework()
+
+	tree := NewTree("test remove child")
+	framework.addTree(tree)
+
 	paral := NewParallelNode()
 	tree.Root().SetChild(paral)
 
-	bd := newBevBBIncrParams(key, unit)
+	bd := newBevBBIncr(key, unit)
 
 	sc := NewSucceederNode()
 	sc.SetChild(NewBevNode(bd))
@@ -586,7 +721,11 @@ func TestRemoveChild(t *testing.T) {
 		t.FailNow()
 	}
 
-	entity := NewEntity(tree, nil)
+	entity, err := framework.CreateEntity("test remove child", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	if entity.Update() != Failure {
 		t.FailNow()
 	}
@@ -595,8 +734,10 @@ func TestRemoveChild(t *testing.T) {
 func TestSubtree(t *testing.T) {
 	test := newTest()
 
+	tree := test.createTree("test subtree")
+
 	parallel := NewParallelNode()
-	test.tree.Root().SetChild(parallel)
+	tree.Root().SetChild(parallel)
 
 	key := "key"
 	sum := 0
@@ -607,12 +748,14 @@ func TestSubtree(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 
 	{
-		subtree_a := NewTree()
+
+		subtree_a := NewTree("subtree_a")
+		test.framework.addTree(subtree_a)
 		parallel.AddChild(NewSubtreeNode(subtree_a, false))
 		paral := NewParallelNode()
 		subtree_a.Root().SetChild(paral)
 
-		bd := newBevBBIncrParams(key, unit)
+		bd := newBevBBIncr(key, unit)
 
 		sc := NewSucceederNode()
 		sc.SetChild(NewBevNode(bd))
@@ -664,12 +807,13 @@ func TestSubtree(t *testing.T) {
 	}
 
 	{
-		subtree_b := NewTree()
+		subtree_b := NewTree("subtree_b")
+		test.framework.addTree(subtree_b)
 		parallel.AddChild(NewSubtreeNode(subtree_b, false))
 		paral := NewParallelNode()
 		subtree_b.Root().SetChild(paral)
 
-		bd := newBevBBIncrParams(key, unit)
+		bd := newBevBBIncr(key, unit)
 
 		sc := NewSucceederNode()
 		sc.SetChild(NewBevNode(bd))
@@ -720,6 +864,5 @@ func TestSubtree(t *testing.T) {
 		sum += (selcSuccN + 1) * unit
 	}
 
-	test.entity.Context().DataSet().SetInt(key, 0)
-	test.run(t, Success, map[string]interface{}{key: sum}, 1)
+	test.run(t, "test subtree", Success, 1, keyValue{key: key, def: 0, expected: sum})
 }

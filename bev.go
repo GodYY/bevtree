@@ -1,27 +1,25 @@
 package bevtree
 
-import (
-	"github.com/GodYY/gutils/assert"
-)
+import "github.com/GodYY/gutils/assert"
 
 // Behavior type.
-type BevType int32
+type BevType string
 
-// Behavior parameters, the structure data of Behavior.
-type BevParams interface {
+func (t BevType) Valid() bool { return string(t) != "" }
+
+func (t BevType) String() string { return string(t) }
+
+// Bev is the structure data of Behavior.
+type Bev interface {
 	BevType() BevType
+	CreateBev() BevEntity
+	DestroyBev(BevEntity)
 }
 
-// The interface behavior must implements.
-type Bev interface {
+// BevEntity is the entity of Bev for running.
+type BevEntity interface {
 	// Behavior type.
 	BevType() BevType
-
-	// OnCreate is called immediately after the behavior is created.
-	OnCreate(BevParams)
-
-	// OnDestroy is called before the behavior is destroyed.
-	OnDestroy()
 
 	// OnInit is called before the first update of the behavior.
 	OnInit(Context) bool
@@ -34,160 +32,61 @@ type Bev interface {
 	OnTerminate(Context)
 }
 
-// The metadata of behavior.
-type bevMETA struct {
-	// Behavior name.
-	name string
-
-	// Behaivor type, assigned at registration.
-	typ BevType
-
-	// The creator of the behavior.
-	bevCreator func() Bev
-
-	// The paramters creator of behavior.
-	paramsCreator func() BevParams
-
-	// The pool that cache destroyed behavior.
-	bevPool *pool
-}
-
-// Use paramsCreator to create behavior parameters.
-func (meta *bevMETA) createParams() BevParams {
-	return meta.paramsCreator()
-}
-
-// Create a behavior. First, get one cached or create a new one.
-// Then, call the OnCreate method of the behavior.
-func (meta *bevMETA) createBev(params BevParams) Bev {
-	b := meta.bevPool.get().(Bev)
-	if b != nil {
-		b.OnCreate(params)
-	}
-	return b
-}
-
-// Destroy the behavior. First, call the OnDestroy method of the
-// behavior. Then, put it to be cacehd to the pool.
-func (meta *bevMETA) destroyBev(b Bev) {
-	b.OnDestroy()
-	meta.bevPool.put(b)
-}
-
-// The mapping of behavior name to metadata.
-var bevName2META = map[string]*bevMETA{}
-
-// The mapping of behavior type to metadata.
-var bevType2META = map[BevType]*bevMETA{}
-
-// Get behavior metadata by behavior type.
-func getBevMETAByType(bevType BevType) *bevMETA { return bevType2META[bevType] }
-
-// Register a type of behavior. It create the metadata of the
-// behavior, and assign it a type value.
-func RegisterBevType(name string, bevCreator func() Bev, paramsCreator func() BevParams) BevType {
-	assert.NotEqual(name, "", "invalid name")
-	assert.Assert(bevCreator != nil, "bevCreator nil")
-	assert.Assert(paramsCreator != nil, "paramsCreator nil")
-
-	assert.AssertF(bevName2META[name] == nil, "bev type \"%s\" already registered", name)
-
-	meta := &bevMETA{
-		name:          name,
-		typ:           BevType(len(bevName2META)),
-		bevCreator:    bevCreator,
-		paramsCreator: paramsCreator,
-		bevPool:       newPool(func() interface{} { return bevCreator() }),
-	}
-
-	bevName2META[name] = meta
-	bevType2META[meta.typ] = meta
-
-	return meta.typ
-}
-
-func (t BevType) String() string { return bevType2META[t].name }
-
-func chekcBevTyps() {
-	for _, v := range bevName2META {
-		params := v.createParams()
-		assert.AssertF(params != nil, "bev type \"%s\" create nil BevParams", v.name)
-		assert.AssertF(params.BevType() == v.typ, "BevParams created of type \"%s\" has different type", v.name)
-
-		bev := v.createBev(params)
-		assert.AssertF(bev != nil, "bev type \"%s\" create nil Bev", v.name)
-		assert.AssertF(bev.BevType() == v.typ, "Bev created of type \"%s\" has different type", v.name)
-		v.destroyBev(bev)
-	}
-}
-
-func init() {
-	chekcBevTyps()
-}
-
 // The behavior node of behavior tree, a kind of leaf node.
 type BevNode struct {
 	// Common part of node.
 	node
 
-	// Behavior parameters.
-	bevParams BevParams
+	// Behavior.
+	bev Bev
 }
 
-func NewBevNode(bevParams BevParams) *BevNode {
+func NewBevNode(bev Bev) *BevNode {
+	assert.Assert(bev != nil, "bev nil")
 	return &BevNode{
-		node:      newNode(),
-		bevParams: bevParams,
+		node: newNode(),
+		bev:  bev,
 	}
 }
 
 func (BevNode) NodeType() NodeType { return behavior }
 
-func (b *BevNode) BevParams() BevParams             { return b.bevParams }
-func (b *BevNode) SetBevParams(bevParams BevParams) { b.bevParams = bevParams }
+func (b *BevNode) Bev() Bev { return b.bev }
+
+func (b *BevNode) SetBev(bev Bev) {
+	assert.Assert(bev != nil, "bev nil")
+	b.bev = bev
+}
 
 // Behavior task, the runtime of BevNode.
 type bevTask struct {
-	bev Bev
+	bev       Bev
+	bevEntity BevEntity
 }
 
 func (b *bevTask) TaskType() TaskType { return Single }
 
 func (b *bevTask) OnCreate(node Node) {
-	bevNode := node.(*BevNode)
-	bevParams := bevNode.BevParams()
-	if bevParams != nil {
-		b.bev = getBevMETAByType(bevParams.BevType()).createBev(bevParams)
-	}
+	b.bev = node.(*BevNode).Bev()
+	b.bevEntity = b.bev.CreateBev()
 }
 
 func (b *bevTask) OnDestroy() {
-	if b.bev != nil {
-		getBevMETAByType(b.bev.BevType()).destroyBev(b.bev)
-		b.bev = nil
-	}
+	b.bev.DestroyBev(b.bevEntity)
+	b.bevEntity = nil
+	b.bev = nil
 }
 
 func (b *bevTask) OnInit(_ NodeList, ctx Context) bool {
-	if b.bev == nil {
-		return false
-	} else {
-		return b.bev.OnInit(ctx)
-	}
+	return b.bevEntity.OnInit(ctx)
 }
 
 func (b *bevTask) OnUpdate(ctx Context) Result {
-	if b.bev == nil {
-		return Failure
-	} else {
-		return b.bev.OnUpdate(ctx)
-	}
+	return b.bevEntity.OnUpdate(ctx)
 }
 
 func (b *bevTask) OnTerminate(ctx Context) {
-	if b.bev != nil {
-		b.bev.OnTerminate(ctx)
-	}
+	b.bevEntity.OnTerminate(ctx)
 }
 
 func (b *bevTask) OnChildTerminated(Result, NodeList, Context) Result { panic("shouldnt be invoked") }
