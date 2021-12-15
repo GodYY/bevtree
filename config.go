@@ -77,25 +77,25 @@ func saveConfig(config *Config, path string) (err error) {
 	return nil
 }
 
-type exporter struct {
+type Exporter struct {
 	framework *Framework
 	config    *Config
 	trees     map[string]*Tree
 }
 
-func NewExporter(fw *Framework) *exporter {
-	return &exporter{
+func NewExporter(fw *Framework) *Exporter {
+	return &Exporter{
 		framework: fw,
 		config:    &Config{},
 		trees:     map[string]*Tree{},
 	}
 }
 
-func (e *exporter) SetLoadAll(loadall bool) {
+func (e *Exporter) SetLoadAll(loadall bool) {
 	e.config.LoadAll = loadall
 }
 
-func (e *exporter) AddTree(tree *Tree, path string) error {
+func (e *Exporter) AddTree(tree *Tree, path string) error {
 	if tree == nil {
 		return nil
 	}
@@ -110,7 +110,7 @@ func (e *exporter) AddTree(tree *Tree, path string) error {
 	return nil
 }
 
-func (e *exporter) Export(rootPath, configPath string) error {
+func (e *Exporter) Export(rootPath, configPath string) error {
 	for _, ta := range e.config.TreeEntries {
 		tree := e.trees[ta.Name]
 		if tree == nil {
