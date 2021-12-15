@@ -1,8 +1,0 @@
-<config>
-    <loadall>true</loadall>
-    <bevtrees>
-        <bevtree name="subtree_a" path="subtree_a.xml"></bevtree>
-        <bevtree name="subtree_b" path="subtree_b.xml"></bevtree>
-        <bevtree name="test subtree" path="test_subtree.xml"></bevtree>
-    </bevtrees>
-</config>
