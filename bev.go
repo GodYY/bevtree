@@ -12,12 +12,12 @@ func (t BevType) String() string { return string(t) }
 // Bev is the structure data of Behavior.
 type Bev interface {
 	BevType() BevType
-	CreateBev() BevEntity
-	DestroyBev(BevEntity)
+	CreateInstance() BevInstance
+	DestroyInstance(BevInstance)
 }
 
-// BevEntity is the entity of Bev for running.
-type BevEntity interface {
+// BevInstance is the entity of Bev for running.
+type BevInstance interface {
 	// Behavior type.
 	BevType() BevType
 
@@ -60,33 +60,33 @@ func (b *BevNode) SetBev(bev Bev) {
 
 // Behavior task, the runtime of BevNode.
 type bevTask struct {
-	bev       Bev
-	bevEntity BevEntity
+	bev     Bev
+	bevInst BevInstance
 }
 
 func (b *bevTask) TaskType() TaskType { return Single }
 
 func (b *bevTask) OnCreate(node Node) {
 	b.bev = node.(*BevNode).Bev()
-	b.bevEntity = b.bev.CreateBev()
+	b.bevInst = b.bev.CreateInstance()
 }
 
 func (b *bevTask) OnDestroy() {
-	b.bev.DestroyBev(b.bevEntity)
-	b.bevEntity = nil
+	b.bev.DestroyInstance(b.bevInst)
+	b.bevInst = nil
 	b.bev = nil
 }
 
 func (b *bevTask) OnInit(_ NodeList, ctx Context) bool {
-	return b.bevEntity.OnInit(ctx)
+	return b.bevInst.OnInit(ctx)
 }
 
 func (b *bevTask) OnUpdate(ctx Context) Result {
-	return b.bevEntity.OnUpdate(ctx)
+	return b.bevInst.OnUpdate(ctx)
 }
 
 func (b *bevTask) OnTerminate(ctx Context) {
-	b.bevEntity.OnTerminate(ctx)
+	b.bevInst.OnTerminate(ctx)
 }
 
 func (b *bevTask) OnChildTerminated(Result, NodeList, Context) Result { panic("shouldnt be invoked") }

@@ -9,7 +9,7 @@
                     </child>
                 </child>
                 <child nodetype="repeater">
-                    <limited>7</limited>
+                    <limited>5</limited>
                     <child nodetype="behavior" bevtype="blackboardIncr">
                         <Key>key</Key>
                         <Limited>1</Limited>
@@ -33,7 +33,15 @@
                     </child>
                 </child>
                 <child nodetype="sequence">
-                    <childs count="8">
+                    <childs count="10">
+                        <child nodetype="behavior" bevtype="blackboardIncr">
+                            <Key>key</Key>
+                            <Limited>1</Limited>
+                        </child>
+                        <child nodetype="behavior" bevtype="blackboardIncr">
+                            <Key>key</Key>
+                            <Limited>1</Limited>
+                        </child>
                         <child nodetype="behavior" bevtype="blackboardIncr">
                             <Key>key</Key>
                             <Limited>1</Limited>
@@ -69,49 +77,7 @@
                     </childs>
                 </child>
                 <child nodetype="selector">
-                    <childs count="10">
-                        <child nodetype="inverter">
-                            <child nodetype="behavior" bevtype="blackboardIncr">
-                                <Key>key</Key>
-                                <Limited>1</Limited>
-                            </child>
-                        </child>
-                        <child nodetype="inverter">
-                            <child nodetype="behavior" bevtype="blackboardIncr">
-                                <Key>key</Key>
-                                <Limited>1</Limited>
-                            </child>
-                        </child>
-                        <child nodetype="inverter">
-                            <child nodetype="behavior" bevtype="blackboardIncr">
-                                <Key>key</Key>
-                                <Limited>1</Limited>
-                            </child>
-                        </child>
-                        <child nodetype="inverter">
-                            <child nodetype="behavior" bevtype="blackboardIncr">
-                                <Key>key</Key>
-                                <Limited>1</Limited>
-                            </child>
-                        </child>
-                        <child nodetype="inverter">
-                            <child nodetype="behavior" bevtype="blackboardIncr">
-                                <Key>key</Key>
-                                <Limited>1</Limited>
-                            </child>
-                        </child>
-                        <child nodetype="inverter">
-                            <child nodetype="behavior" bevtype="blackboardIncr">
-                                <Key>key</Key>
-                                <Limited>1</Limited>
-                            </child>
-                        </child>
-                        <child nodetype="inverter">
-                            <child nodetype="behavior" bevtype="blackboardIncr">
-                                <Key>key</Key>
-                                <Limited>1</Limited>
-                            </child>
-                        </child>
+                    <childs count="6">
                         <child nodetype="inverter">
                             <child nodetype="behavior" bevtype="blackboardIncr">
                                 <Key>key</Key>
@@ -127,6 +93,24 @@
                         <child nodetype="behavior" bevtype="blackboardIncr">
                             <Key>key</Key>
                             <Limited>1</Limited>
+                        </child>
+                        <child nodetype="inverter">
+                            <child nodetype="behavior" bevtype="blackboardIncr">
+                                <Key>key</Key>
+                                <Limited>1</Limited>
+                            </child>
+                        </child>
+                        <child nodetype="inverter">
+                            <child nodetype="behavior" bevtype="blackboardIncr">
+                                <Key>key</Key>
+                                <Limited>1</Limited>
+                            </child>
+                        </child>
+                        <child nodetype="inverter">
+                            <child nodetype="behavior" bevtype="blackboardIncr">
+                                <Key>key</Key>
+                                <Limited>1</Limited>
+                            </child>
                         </child>
                     </childs>
                 </child>

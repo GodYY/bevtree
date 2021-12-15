@@ -9,7 +9,7 @@
                     </child>
                 </child>
                 <child nodetype="repeater">
-                    <limited>9</limited>
+                    <limited>10</limited>
                     <child nodetype="behavior" bevtype="blackboardIncr">
                         <Key>key</Key>
                         <Limited>1</Limited>

@@ -27,11 +27,11 @@ func newBevFunc(f func(Context) Result) *bevFunc {
 
 func (bevFunc) BevType() BevType { return function }
 
-func (b *bevFunc) CreateBev() BevEntity {
+func (b *bevFunc) CreateInstance() BevInstance {
 	return &bevFuncEntity{f: b.f}
 }
 
-func (b *bevFunc) DestroyBev(BevEntity) {}
+func (b *bevFunc) DestroyInstance(BevInstance) {}
 
 type bevFuncEntity struct {
 	f func(Context) Result
@@ -60,11 +60,11 @@ func newBehaviorIncr(key string, limited int) *behaviorIncr {
 
 func (behaviorIncr) BevType() BevType { return increase }
 
-func (b *behaviorIncr) CreateBev() BevEntity {
+func (b *behaviorIncr) CreateInstance() BevInstance {
 	return &behaviorIncrEntity{behaviorIncr: b}
 }
 
-func (b *behaviorIncr) DestroyBev(BevEntity) {}
+func (b *behaviorIncr) DestroyInstance(BevInstance) {}
 
 type behaviorIncrEntity struct {
 	*behaviorIncr
@@ -101,11 +101,11 @@ func newBehaviorUpdate(lmited int) *behaviorUpdate {
 
 func (behaviorUpdate) BevType() BevType { return update }
 
-func (b *behaviorUpdate) CreateBev() BevEntity {
+func (b *behaviorUpdate) CreateInstance() BevInstance {
 	return &behaviorUpdateEntity{behaviorUpdate: b}
 }
 
-func (b *behaviorUpdate) DestroyBev(BevEntity) {}
+func (b *behaviorUpdate) DestroyInstance(BevInstance) {}
 
 type behaviorUpdateEntity struct {
 	*behaviorUpdate
@@ -149,11 +149,11 @@ func newBevBBIncr(key string, limited int) *bevBBIncr {
 
 func (bevBBIncr) BevType() BevType { return blackboardIncr }
 
-func (b *bevBBIncr) CreateBev() BevEntity {
+func (b *bevBBIncr) CreateInstance() BevInstance {
 	return &bevBBIncrEntity{bevBBIncr: b}
 }
 
-func (b *bevBBIncr) DestroyBev(BevEntity) {}
+func (b *bevBBIncr) DestroyInstance(BevInstance) {}
 
 type bevBBIncrEntity struct {
 	*bevBBIncr
