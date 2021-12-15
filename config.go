@@ -110,13 +110,15 @@ func (e *Exporter) AddTree(tree *Tree, path string) error {
 	return nil
 }
 
-func (e *Exporter) Export(rootPath, configPath string) error {
+func (e *Exporter) Export(configPath string) error {
 	for _, ta := range e.config.TreeEntries {
 		tree := e.trees[ta.Name]
 		if tree == nil {
 			return errors.Errorf("bevtree exporter Export: tree \"%s\" not exist", ta.Name)
 		}
 	}
+
+	rootPath := path.Dir(configPath)
 
 	if err := os.MkdirAll(rootPath, os.ModePerm); err != nil && !os.IsExist(err) {
 		return err

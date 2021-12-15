@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"path"
 	"time"
 
 	. "github.com/GodYY/bevtree"
@@ -188,8 +187,7 @@ func newTestFramework() *Framework {
 
 func main() {
 	framework := newTestFramework()
-	rootPath := "."
-	configPath := "config.xml"
+	configPath := "./config.xml"
 	exporter := NewExporter(framework)
 	exporter.SetLoadAll(true)
 
@@ -326,11 +324,11 @@ func main() {
 
 	exporter.AddTree(tree, "test_subtree.xml")
 
-	if err := exporter.Export(rootPath, configPath); err != nil {
+	if err := exporter.Export(configPath); err != nil {
 		log.Fatal(err)
 	}
 
-	if err := framework.Init(path.Join(rootPath, configPath)); err != nil {
+	if err := framework.Init(configPath); err != nil {
 		log.Fatal(err)
 	}
 
