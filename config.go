@@ -18,7 +18,7 @@ type Config struct {
 	TreeEntries []*TreeEntry `xml:"bevtrees>bevtree"`
 }
 
-func LoadConfig(path string) (*Config, error) {
+func loadConfig(path string) (*Config, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -50,7 +50,7 @@ func LoadConfig(path string) (*Config, error) {
 	return config, nil
 }
 
-func SaveConfig(config *Config, path string) (err error) {
+func saveConfig(config *Config, path string) (err error) {
 	if config == nil {
 		return nil
 	}
@@ -77,11 +77,44 @@ func SaveConfig(config *Config, path string) (err error) {
 	return nil
 }
 
-func SaveConfigAndTrees(config *Config, trees map[string]*Tree, framework *Framework, rootPath, configPath string) error {
-	for _, ta := range config.TreeEntries {
-		tree := trees[ta.Name]
+type exporter struct {
+	framework *Framework
+	config    *Config
+	trees     map[string]*Tree
+}
+
+func NewExporter(fw *Framework) *exporter {
+	return &exporter{
+		framework: fw,
+		config:    &Config{},
+		trees:     map[string]*Tree{},
+	}
+}
+
+func (e *exporter) SetLoadAll(loadall bool) {
+	e.config.LoadAll = loadall
+}
+
+func (e *exporter) AddTree(tree *Tree, path string) error {
+	if tree == nil {
+		return nil
+	}
+
+	if e.trees[tree.Name()] != nil {
+		return errors.Errorf("bevtree exporter AddTree: duplicate tree \"%s\"", tree.Name())
+	}
+
+	e.trees[tree.Name()] = tree
+	e.config.TreeEntries = append(e.config.TreeEntries, &TreeEntry{Name: tree.Name(), Path: path})
+
+	return nil
+}
+
+func (e *exporter) Export(rootPath, configPath string) error {
+	for _, ta := range e.config.TreeEntries {
+		tree := e.trees[ta.Name]
 		if tree == nil {
-			return errors.Errorf("tree \"%s\" not exist", ta.Name)
+			return errors.Errorf("bevtree exporter Export: tree \"%s\" not exist", ta.Name)
 		}
 	}
 
@@ -89,8 +122,8 @@ func SaveConfigAndTrees(config *Config, trees map[string]*Tree, framework *Frame
 		return err
 	}
 
-	for _, ta := range config.TreeEntries {
-		tree := trees[ta.Name]
+	for _, ta := range e.config.TreeEntries {
+		tree := e.trees[ta.Name]
 
 		treepath := path.Join(rootPath, ta.Path)
 		dir := path.Dir(treepath)
@@ -98,12 +131,12 @@ func SaveConfigAndTrees(config *Config, trees map[string]*Tree, framework *Frame
 			return err
 		}
 
-		if err := framework.EncodeXMLTreeFile(treepath, tree); err != nil {
+		if err := e.framework.EncodeXMLTreeFile(treepath, tree); err != nil {
 			return err
 		}
 	}
 
-	if err := SaveConfig(config, configPath); err != nil {
+	if err := saveConfig(e.config, configPath); err != nil {
 		return err
 	}
 

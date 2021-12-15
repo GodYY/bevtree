@@ -332,7 +332,7 @@ func (s *Framework) Init(cfgPath string) error {
 		return errors.New("bevtree framework repeated initialization")
 	}
 
-	config, err := LoadConfig(cfgPath)
+	config, err := loadConfig(cfgPath)
 	if err != nil {
 		return errors.WithMessagef(err, "bevtree framework init")
 	}

@@ -187,13 +187,11 @@ func newTestFramework() *Framework {
 }
 
 func main() {
-	config := &Config{
-		LoadAll: true,
-	}
-	trees := map[string]*Tree{}
 	framework := newTestFramework()
 	rootPath := "."
 	configPath := "config.xml"
+	exporter := NewExporter(framework)
+	exporter.SetLoadAll(true)
 
 	tree := NewTree("test subtree")
 
@@ -210,8 +208,7 @@ func main() {
 
 	{
 		subtree_a := NewTree("subtree_a")
-		config.TreeEntries = append(config.TreeEntries, &TreeEntry{Name: "subtree_a", Path: "subtree_a.xml"})
-		trees["subtree_a"] = subtree_a
+		exporter.AddTree(subtree_a, "subtree_a.xml")
 
 		parallel.AddChild(NewSubtreeNode(subtree_a, false))
 		paral := NewParallelNode()
@@ -270,8 +267,7 @@ func main() {
 
 	{
 		subtree_b := NewTree("subtree_b")
-		config.TreeEntries = append(config.TreeEntries, &TreeEntry{Name: "subtree_b", Path: "subtree_b.xml"})
-		trees["subtree_b"] = subtree_b
+		exporter.AddTree(subtree_b, "subtree_b.xml")
 
 		parallel.AddChild(NewSubtreeNode(subtree_b, false))
 		paral := NewParallelNode()
@@ -328,10 +324,9 @@ func main() {
 		sum += (selcSuccN + 1) * unit
 	}
 
-	config.TreeEntries = append(config.TreeEntries, &TreeEntry{Name: "test subtree", Path: "test_subtree.xml"})
-	trees["test subtree"] = tree
+	exporter.AddTree(tree, "test_subtree.xml")
 
-	if err := SaveConfigAndTrees(config, trees, framework, rootPath, configPath); err != nil {
+	if err := exporter.Export(rootPath, configPath); err != nil {
 		log.Fatal(err)
 	}
 
