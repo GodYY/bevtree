@@ -1,6 +1,7 @@
 package bevtree
 
 import (
+	"math"
 	"math/rand"
 	"sync"
 	"testing"
@@ -865,4 +866,53 @@ func TestSubtree(t *testing.T) {
 	}
 
 	test.run(t, "test subtree", Success, 1, keyValue{key: key, def: 0, expected: sum})
+}
+
+func TestWeightSelector(t *testing.T) {
+	rand.Seed(time.Now().UnixNano())
+
+	framework := newTestFramework()
+
+	tree := NewTree("test weight selector")
+	framework.addTree(tree)
+
+	ws := NewWeightSelectorNode()
+	tree.Root().SetChild(ws)
+
+	n := 10000
+	key := "key"
+	valWeights := map[int]float32{
+		1: 0.3,
+		2: 0.4,
+		3: 0.15,
+		4: 0.05,
+		5: 0.1,
+	}
+	tolerance := 0.01
+
+	for v, w := range valWeights {
+		vv := v
+		ws.AddChild(NewBevNode(newBevFunc(func(c Context) Result {
+			c.DataSet().Set(key, vv)
+			return Success
+		})), w)
+	}
+
+	entity, _ := framework.CreateEntity("test weight selector", nil)
+	results := map[int]int{}
+	for i := 0; i < n; i++ {
+		entity.Update()
+		results[entity.Context().DataSet().Get(key).(int)] += 1
+	}
+
+	t.Log("probability statistics")
+	for v, count := range results {
+		p := float64(count) / float64(n)
+		diff := math.Abs(p - float64(valWeights[v]))
+		if diff < tolerance {
+			t.Logf("\t%d: %f", v, p)
+		} else {
+			t.Fatalf("\t%d: %f, taget: %f, diff(%f) > tolerance(%f)", v, p, valWeights[v], diff, tolerance)
+		}
+	}
 }

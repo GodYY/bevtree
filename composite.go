@@ -2,6 +2,8 @@ package bevtree
 
 import (
 	"math/rand"
+
+	"github.com/GodYY/gutils/assert"
 )
 
 // The CompositeNode Interface represents the functions that
@@ -37,26 +39,20 @@ func newCompositeNode() compositeNode {
 func (c *compositeNode) ChildCount() int { return len(c.children) }
 
 func (c *compositeNode) Child(idx int) Node {
-	if idx < 0 || idx >= c.ChildCount() {
-		return nil
-	}
+	assert.Assert(idx >= 0 && idx < c.ChildCount(), "index out of range")
 
 	return c.children[idx]
 }
 
-func (c *compositeNode) addChild(child Node) bool {
-	if child == nil || child.Parent() != nil {
-		return false
-	}
+func (c *compositeNode) addChild(child Node) {
+	assert.Assert(child != nil, "child nil")
+	assert.Assert(child.Parent() == nil, "child already has parent")
 
 	c.children = append(c.children, child)
-	return true
 }
 
 func (c *compositeNode) RemoveChild(idx int) Node {
-	if idx < 0 || idx >= c.ChildCount() {
-		return nil
-	}
+	assert.Assert(idx >= 0 && idx < c.ChildCount(), "index out of range")
 
 	child := c.children[idx]
 	child.SetParent(nil)
@@ -80,9 +76,8 @@ func NewSequenceNode() *SequenceNode {
 func (s *SequenceNode) NodeType() NodeType { return sequence }
 
 func (s *SequenceNode) AddChild(child Node) {
-	if s.compositeNode.addChild(child) {
-		child.SetParent(s)
-	}
+	s.compositeNode.addChild(child)
+	child.SetParent(s)
 }
 
 // The sequence node task.
@@ -138,9 +133,8 @@ func NewSelectorNode() *SelectorNode {
 func (s *SelectorNode) NodeType() NodeType { return selector }
 
 func (s *SelectorNode) AddChild(child Node) {
-	if s.compositeNode.addChild(child) {
-		child.SetParent(s)
-	}
+	s.compositeNode.addChild(child)
+	child.SetParent(s)
 }
 
 // The selector node task.
@@ -226,9 +220,8 @@ func NewRandSequenceNode() *RandSequenceNode {
 func (s *RandSequenceNode) NodeType() NodeType { return randSequence }
 
 func (s *RandSequenceNode) AddChild(child Node) {
-	if s.compositeNode.addChild(child) {
-		child.SetParent(s)
-	}
+	s.compositeNode.addChild(child)
+	child.SetParent(s)
 }
 
 // The randome sequence node task.
@@ -289,9 +282,8 @@ func NewRandSelectorNode() *RandSelectorNode {
 func (s *RandSelectorNode) NodeType() NodeType { return randSelector }
 
 func (s *RandSelectorNode) AddChild(child Node) {
-	if s.compositeNode.addChild(child) {
-		child.SetParent(s)
-	}
+	s.compositeNode.addChild(child)
+	child.SetParent(s)
 }
 
 // The random selector task.
@@ -337,6 +329,113 @@ func (s *randSelectorTask) OnChildTerminated(result Result, nextChildNodes NodeL
 	}
 }
 
+type weightNode struct {
+	node   Node
+	weight float32
+}
+
+type WeightSelectorNode struct {
+	node
+	children []*weightNode
+}
+
+func NewWeightSelectorNode() *WeightSelectorNode {
+	return &WeightSelectorNode{node: newNode()}
+}
+
+func (n *WeightSelectorNode) NodeType() NodeType { return weightSelector }
+
+func (n *WeightSelectorNode) ChildCount() int { return len(n.children) }
+
+func (n *WeightSelectorNode) Child(idx int) (Node, float32) {
+	assert.Assert(idx >= 0 && idx < n.ChildCount(), "index out of range")
+
+	wnode := n.children[idx]
+	return wnode.node, wnode.weight
+}
+
+func (n *WeightSelectorNode) AddChild(child Node, weight float32) {
+	assert.Assert(child != nil, "child nil")
+	assert.Assert(child.Parent() == nil, "child already has parent")
+	assert.Assert(weight > 0, "weight <= 0")
+
+	child.SetParent(n)
+	n.children = append(n.children, &weightNode{node: child, weight: weight})
+}
+
+func (n *WeightSelectorNode) ChildWeight(idx int) float32 {
+	assert.Assert(idx >= 0 && idx < n.ChildCount(), "index out of range")
+	return n.children[idx].weight
+}
+
+func (n *WeightSelectorNode) SetChildWeight(idx int, weight float32) {
+	assert.Assert(idx >= 0 && idx < n.ChildCount(), "index out of range")
+	assert.Assert(weight > 0, "weight <= 0")
+	n.children[idx].weight = weight
+}
+
+type weightSelectorTask struct {
+	node *WeightSelectorNode
+}
+
+// Get the TaskType.
+func (t *weightSelectorTask) TaskType() TaskType {
+	return Serial
+}
+
+// OnCreate is called immediately after the Task is created.
+// node indicates the node on which the Task is created.
+func (t *weightSelectorTask) OnCreate(node Node) {
+	t.node = node.(*WeightSelectorNode)
+}
+
+// OnDestroy is called before the Task is destroyed.
+func (t *weightSelectorTask) OnDestroy() {
+	t.node = nil
+}
+
+// OnInit is called before the first update of the Task.
+// nextChildNodes is used to return the child nodes that need
+// to run next. ctx represents the running context of the
+// behavior tree.
+func (t *weightSelectorTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
+	if t.node.ChildCount() == 0 {
+		return false
+	}
+
+	r := rand.Float32()
+	w := float32(0)
+	for i := 0; i < t.node.ChildCount(); i++ {
+		node, weight := t.node.Child(i)
+		w += weight
+		if w > r {
+			nextChildNodes.PushNode(node)
+			return true
+		}
+	}
+
+	return false
+}
+
+// OnUpdate is called until the Task is terminated.
+func (t *weightSelectorTask) OnUpdate(ctx Context) Result {
+	return Running
+}
+
+// OnTerminate is called after ths last update of the Task.
+func (t *weightSelectorTask) OnTerminate(ctx Context) {}
+
+// OnChildTerminated is called when a sub Task is terminated.
+//
+// result Indicates the running result of the subtask.
+// nextChildNodes is used to return the child nodes that need to
+// run next.
+//
+// OnChildTerminated returns the decision result.
+func (t *weightSelectorTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
+	return result
+}
+
 // The parrallel node runs child nodes together until a
 // child returns failure. It returns success if all child
 // nodes return success, or returns failure.
@@ -353,9 +452,8 @@ func NewParallelNode() *ParallelNode {
 func (p *ParallelNode) NodeType() NodeType { return parallel }
 
 func (p *ParallelNode) AddChild(child Node) {
-	if p.compositeNode.addChild(child) {
-		child.SetParent(p)
-	}
+	p.compositeNode.addChild(child)
+	child.SetParent(p)
 }
 
 // The parallel node task.

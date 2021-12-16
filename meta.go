@@ -12,9 +12,10 @@ const (
 	repeater        = NodeType("repeater")        // The repeater node.
 	repeatUntilFail = NodeType("repeatuntilfail") // The repeat-until-fail node.
 	sequence        = NodeType("sequence")        // The sequence node.
-	selector        = NodeType("selector")        // The selector node.
 	randSequence    = NodeType("randSequence")    // The random sequence node.
+	selector        = NodeType("selector")        // The selector node.
 	randSelector    = NodeType("randSelector")    // The random selector node.
+	weightSelector  = NodeType("weightselector")  // The weight selector node.
 	parallel        = NodeType("parallel")        // The parallel node.
 	behavior        = NodeType("behavior")        // The behavior node.
 	subtree         = NodeType("subtree")         // The subtree node.
@@ -93,6 +94,7 @@ func newMeta() *meta {
 	m.RegisterNodeType(parallel, func() Node { return NewParallelNode() }, func() Task { return &parallelTask{} })
 	m.RegisterNodeType(behavior, func() Node { return new(BevNode) }, func() Task { return &bevTask{} })
 	m.RegisterNodeType(subtree, func() Node { return new(SubtreeNode) }, func() Task { return &subtreeTask{} })
+	m.RegisterNodeType(weightSelector, func() Node { return new(WeightSelectorNode) }, func() Task { return &weightSelectorTask{} })
 
 	return m
 }
