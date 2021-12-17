@@ -65,6 +65,8 @@ type Entity interface {
 	// If the entity is no longer used, call Release to
 	// release resource of it.
 	Release()
+
+	internal
 }
 
 // agent represents common parts of behavior tree node.
@@ -98,6 +100,8 @@ type agent struct {
 
 	// agent placeholder int the work queue.
 	elem *element
+
+	internalImpl
 }
 
 // onCreate is called immediately after the agent is created.
@@ -257,7 +261,7 @@ func (a *agent) processNextChildren(entity *entity) {
 
 // If the agent is running, stop it. remove all child agents,
 // notify the task to terminate.
-func (a *agent) stop(ctx *context) {
+func (a *agent) stop(ctx Context) {
 	if a.getStatus() != sRunning {
 		return
 	}
@@ -382,7 +386,7 @@ var agentPool = newPool(func() interface{} { return &agent{} })
 // Entity implementation.
 type entity struct {
 	// The context.
-	ctx *context
+	ctx Context
 
 	// Agent list.
 	agentList *list
@@ -394,9 +398,11 @@ type entity struct {
 	// Child node list. It is used to temporarily store
 	// subsequent child nodes.
 	childNodeList *nodeList
+
+	internalImpl
 }
 
-func newEntity(ctx *context) *entity {
+func newEntity(ctx Context) *entity {
 	assert.Assert(ctx != nil, "ctx nil")
 
 	entity := &entity{
@@ -533,7 +539,7 @@ func (e *entity) clearAgent() {
 }
 
 func (e *entity) createAgent(node Node) *agent {
-	nodeMeta := e.ctx.Framework().getNodeMeta(node.NodeType())
+	nodeMeta := e.ctx.framework().getNodeMeta(node.NodeType())
 	if nodeMeta == nil {
 		panic(fmt.Sprintf("node type \"%s\" meta not found, %s", node.NodeType(), reflect.TypeOf(node).Elem().Name()))
 	}
@@ -557,7 +563,7 @@ func (e *entity) destroyAgent(agent *agent) {
 	}
 
 	node := agent.node
-	nodeMETA := e.ctx.Framework().getNodeMeta(node.NodeType())
+	nodeMETA := e.ctx.framework().getNodeMeta(node.NodeType())
 	if nodeMETA == nil {
 		panic(fmt.Sprintf("node type \"%s\" meta not found, %s", node.NodeType(), reflect.TypeOf(node).Elem().Name()))
 	}
@@ -577,7 +583,7 @@ func (e *entity) Update() Result {
 		// No agents indicate the behavior tree was not run yet
 		// or it had completed a traversal from root to root node.
 		// Need to start a new traversal from the root node.
-		e.pushAgent(e.createAgent(e.ctx.Tree().Root()))
+		e.pushAgent(e.createAgent(e.ctx.Tree().root()))
 	}
 
 	// The default result.

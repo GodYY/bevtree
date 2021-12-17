@@ -11,11 +11,11 @@ func TestTreeMarshalXML(t *testing.T) {
 
 	framework := newTestFramework()
 
-	tree := NewTree("XML测试")
-	framework.addTree(tree)
+	oldTree := NewTree("XML测试")
+	framework.addTree(oldTree)
 
 	parallel := NewParallelNode()
-	tree.Root().SetChild(parallel)
+	oldTree.Root().SetChild(parallel)
 
 	key := "key"
 	sum := 0
@@ -159,14 +159,14 @@ func TestTreeMarshalXML(t *testing.T) {
 	}
 	entity.Release()
 
-	data, err := framework.MarshalXMLTree(tree)
+	data, err := framework.MarshalXMLTree(oldTree)
 	if err != nil {
 		t.Fatal("marshal Tree:", err)
 	} else {
 		t.Log("marshal Tree:", string(data))
 	}
 
-	newTree := new(Tree)
+	newTree := new(tree)
 	if err := framework.UnmarshalXMLTree(data, newTree); err != nil {
 		t.Fatal("unmarshal previos Tree:", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -506,7 +507,7 @@ func (d *XMLDecoder) unmarshalBevTypeAttr(attr xml.Attr) (BevType, error) {
 	}
 }
 
-func MarshalXMLTree(framework *Framework, t *Tree) ([]byte, error) {
+func MarshalXMLTree(framework *Framework, t *tree) ([]byte, error) {
 	if framework == nil {
 		return nil, errors.New("marshal xml tree: framework nil")
 	}
@@ -527,7 +528,7 @@ func MarshalXMLTree(framework *Framework, t *Tree) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func UnmarshalXMLTree(framework *Framework, data []byte, t *Tree) error {
+func UnmarshalXMLTree(framework *Framework, data []byte, t *tree) error {
 	if framework == nil {
 		return errors.New("unmarshal xml tree: framework nil")
 	}
@@ -546,7 +547,7 @@ func UnmarshalXMLTree(framework *Framework, data []byte, t *Tree) error {
 	return nil
 }
 
-func EncodeXMLTreeFile(framework *Framework, path string, t *Tree) (err error) {
+func EncodeXMLTreeFile(framework *Framework, path string, t *tree) (err error) {
 	if framework == nil {
 		return errors.New("encode xml tree file: framework nil")
 	}
@@ -579,7 +580,7 @@ func EncodeXMLTreeFile(framework *Framework, path string, t *Tree) (err error) {
 	return nil
 }
 
-func DecodeXMLTreeFile(framework *Framework, path string, t *Tree) error {
+func DecodeXMLTreeFile(framework *Framework, path string, t *tree) error {
 	if framework == nil {
 		return errors.New("decode xml tree file: framework nil")
 	}
@@ -604,7 +605,7 @@ func DecodeXMLTreeFile(framework *Framework, path string, t *Tree) error {
 }
 
 // MarshalXMLTree return an bevtree XML encoding of t.
-func (f *Framework) MarshalXMLTree(t *Tree) ([]byte, error) {
+func (f *Framework) MarshalXMLTree(t *tree) ([]byte, error) {
 	if data, err := MarshalXMLTree(f, t); err != nil {
 		return nil, errors.WithMessage(err, "framework")
 	} else {
@@ -614,7 +615,7 @@ func (f *Framework) MarshalXMLTree(t *Tree) ([]byte, error) {
 
 // UnmarshalXMLTree parses the bevtree XML-encoded Tree
 // data and stores the result in the Tree pointed to by t.
-func (f *Framework) UnmarshalXMLTree(data []byte, t *Tree) error {
+func (f *Framework) UnmarshalXMLTree(data []byte, t *tree) error {
 	if err := UnmarshalXMLTree(f, data, t); err != nil {
 		return errors.WithMessage(err, "framework")
 	} else {
@@ -624,7 +625,7 @@ func (f *Framework) UnmarshalXMLTree(data []byte, t *Tree) error {
 
 // EncodeXMLTreeFile works like MarshalXMLTree but write
 // encoded data to file.
-func (f *Framework) EncodeXMLTreeFile(path string, t *Tree) (err error) {
+func (f *Framework) EncodeXMLTreeFile(path string, t *tree) (err error) {
 	if err := EncodeXMLTreeFile(f, path, t); err != nil {
 		return errors.WithMessage(err, "framework")
 	} else {
@@ -634,7 +635,7 @@ func (f *Framework) EncodeXMLTreeFile(path string, t *Tree) (err error) {
 
 // DecodeXMLTreeFile works like UnmarshalXMLTree but read
 // encoded data from file.
-func (f *Framework) DecodeXMLTreeFile(path string, t *Tree) error {
+func (f *Framework) DecodeXMLTreeFile(path string, t *tree) error {
 	if err := DecodeXMLTreeFile(f, path, t); err != nil {
 		return errors.WithMessage(err, "framework")
 	} else {
@@ -642,7 +643,7 @@ func (f *Framework) DecodeXMLTreeFile(path string, t *Tree) error {
 	}
 }
 
-func (t *Tree) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
+func (t *tree) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 	if debug {
 		log.Printf("Tree.MarshalBTXML start:%v", start)
 	}
@@ -661,7 +662,7 @@ func (t *Tree) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 
 	if err := e.EncodeSE(start, func(x *XMLEncoder) error {
 		rootStart := xml.StartElement{Name: XMLName(XMLStringRoot)}
-		if err := e.EncodeElementSE(t.root, rootStart); err != nil {
+		if err := e.EncodeElementSE(t._root, rootStart); err != nil {
 			return errors.WithMessagef(err, "Marshal root")
 		}
 
@@ -673,7 +674,7 @@ func (t *Tree) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
 	return nil
 }
 
-func (t *Tree) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
+func (t *tree) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 	if debug {
 		log.Printf("Tree.UnmarshalBTXML start:%v", start)
 	}
@@ -690,11 +691,11 @@ func (t *Tree) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 		return errors.New("tree has no name")
 	}
 
-	if t.root == nil {
-		t.root = newRootNode()
+	if t._root == nil {
+		t._root = newRootNode()
 	}
 
-	if err := d.DecodeElementAt(t.root, XMLName(XMLStringRoot)); err != nil {
+	if err := d.DecodeElementAt(t._root, XMLName(XMLStringRoot)); err != nil {
 		return errors.WithMessagef(err, "Tree %s Unmarshal root", XMLTokenToString(start))
 	}
 
@@ -1174,7 +1175,7 @@ func (b *BevNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
 		if attr.Name == xmlNameBevType {
 			var bevType BevType
 			if bevType, err = d.unmarshalBevTypeAttr(attr); err == nil {
-				bev = d.Framework().getBevMeta(bevType).create()
+				bev = d.Framework().getBevMeta(bevType).createBev()
 				err = d.DecodeElement(bev, start)
 			}
 
@@ -1227,6 +1228,123 @@ func (s *SubtreeNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) erro
 
 	if s.subtree == nil {
 		return errors.Errorf("SubtreeNode %s Unmarshal: attr subtree not exist", XMLTokenToString(start))
+	}
+
+	return d.Skip()
+}
+
+func (n *WeightSelectorNode) MarshalBTXML(e *XMLEncoder, start xml.StartElement) error {
+	if debug {
+		log.Printf("WeightSelectorNode.MarshalBTXML start:%v", start)
+	}
+
+	if err := e.EncodeSE(start, func(x *XMLEncoder) error {
+		childCount := n.ChildCount()
+		if childCount == 0 {
+			return nil
+		}
+
+		childsStart := xml.StartElement{Name: XMLName(XMLStringChilds)}
+		childsStart.Attr = append(childsStart.Attr, xml.Attr{Name: XMLName("count"), Value: strconv.Itoa(childCount)})
+
+		if err := e.EncodeToken(childsStart); err != nil {
+			return err
+		}
+
+		for i := 0; i < childCount; i++ {
+			child, weight := n.Child(i)
+			childStart := xml.StartElement{Name: XMLName(XMLStringChild)}
+			childStart.Attr = append(childStart.Attr, xml.Attr{Name: XMLName("weight"), Value: strconv.FormatFloat(float64(weight), 'f', -1, 32)})
+			if err := e.EncodeNode(child, childStart); err != nil {
+				return errors.WithMessagef(err, "Marshal No.%d child", i)
+			}
+		}
+
+		if err := e.EncodeToken(childsStart.End()); err != nil {
+			return err
+		}
+
+		return nil
+
+	}); err != nil {
+		return errors.WithMessagef(err, "WeightSelectorNode %s Marshal", XMLTokenToString(start))
+	}
+
+	return nil
+}
+
+func (n *WeightSelectorNode) UnmarshalBTXML(d *XMLDecoder, start xml.StartElement) error {
+	if debug {
+		log.Printf("WeightSelectorNode.UnmarshalBTXML start:%v", start)
+	}
+
+	if err := d.DecodeAtUntil(XMLName(XMLStringChilds), start.End(), func(d *XMLDecoder, s xml.StartElement) error {
+		xmlCountName := XMLName("count")
+		var childCount int
+		var childs []*weightNode
+		for _, attr := range s.Attr {
+			if attr.Name == xmlCountName {
+				var err error
+				if childCount, err = strconv.Atoi(attr.Value); err != nil {
+					return errors.WithMessage(err, "Unmarshal child count")
+				} else if childCount <= 0 {
+					return fmt.Errorf("invalid child count: %d", childCount)
+				} else {
+					childs = make([]*weightNode, 0, childCount)
+					break
+				}
+			}
+		}
+
+		if childCount > 0 {
+			xmlChildName := XMLName(XMLStringChild)
+			if err := d.DecodeAtUntil(xmlChildName, s.End(), func(d *XMLDecoder, s xml.StartElement) error {
+				if len(childs) >= childCount {
+					return errors.New("too many children")
+				}
+
+				var weight = math.NaN()
+				xmlNameWeight := XMLName("weight")
+				for _, attr := range s.Attr {
+					if attr.Name == xmlNameWeight {
+						if w, err := strconv.ParseFloat(attr.Value, 32); err != nil {
+							return errors.WithMessagef(err, "Unmarshal attr weight")
+						} else {
+							weight = w
+						}
+					}
+				}
+
+				if math.IsNaN(weight) {
+					return errors.New("attr weight not found")
+				}
+
+				if node, err := d.DecodeNode(s); err != nil {
+					return err
+				} else {
+					childs = append(childs, &weightNode{node: node, weight: float32(weight)})
+					return nil
+				}
+
+			}); err != nil {
+				return errors.WithMessagef(err, "Unmarshal No.%d child", len(childs))
+			}
+
+			if len(childs) < childCount {
+				return errors.New("too few children")
+			}
+		}
+
+		n.children = childs
+
+		if err := d.Skip(); err != nil {
+			return err
+		}
+
+		return ErrXMLDecodeStop
+
+	}); err != nil {
+		return errors.WithMessagef(err, "WeightSelectorNode %s Unmarshal", XMLTokenToString(start))
 	}
 
 	return d.Skip()

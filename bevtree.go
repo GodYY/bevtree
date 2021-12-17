@@ -175,9 +175,6 @@ type Task interface {
 	// node indicates the node on which the Task is created.
 	OnCreate(node Node)
 
-	// OnDestroy is called before the Task is destroyed.
-	OnDestroy()
-
 	// OnInit is called before the first update of the Task.
 	// nextChildNodes is used to return the child nodes that need
 	// to run next. ctx represents the running context of the
@@ -187,7 +184,8 @@ type Task interface {
 	// OnUpdate is called until the Task is terminated.
 	OnUpdate(ctx Context) Result
 
-	// OnTerminate is called after ths last update of the Task.
+	// OnTerminate is called either after ths last update or when
+	// stopping it.
 	OnTerminate(ctx Context)
 
 	// OnChildTerminated is called when a sub Task is terminated.
@@ -239,9 +237,7 @@ type rootTask struct {
 
 // rootNode Task is serail task.
 func (r *rootTask) TaskType() TaskType { return Serial }
-
 func (r *rootTask) OnCreate(node Node) { r.node = node.(*rootNode) }
-func (r *rootTask) OnDestroy()         { r.node = nil }
 
 func (r *rootTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	if r.node.Child() == nil {
@@ -253,49 +249,70 @@ func (r *rootTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 }
 
 func (r *rootTask) OnUpdate(ctx Context) Result { return Running }
-func (r *rootTask) OnTerminate(ctx Context)     {}
+func (r *rootTask) OnTerminate(ctx Context)     { r.node = nil }
 
 func (r *rootTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
 	// Returns result of child directly.
 	return result
 }
 
-// Tree, contains the structure data
-type Tree struct {
+// Tree interface, make the tree readonly while in use.
+type Tree interface {
+	// Get tree anme.
+	Name() string
+
+	// Get tree comment.
+	Comment() string
+
+	// Get root node.
+	root() *rootNode
+
+	internal
+}
+
+// tree, contains the structure data
+type tree struct {
 	// The name of the behavior tree.
 	name string
 
 	// The comment of the behavior tree.
 	comment string
 
-	// The root node of behavior tree.
-	root *rootNode
+	// The _root node of behavior tree.
+	_root *rootNode
+
+	internalImpl
 }
 
-func NewTree(name string) *Tree {
+func NewTree(name string) *tree {
 	assert.AssertF(name != "", "invalid name \"%s\"", name)
 
-	tree := &Tree{
-		name: name,
-		root: newRootNode(),
+	tree := &tree{
+		name:  name,
+		_root: newRootNode(),
 	}
+
 	return tree
 }
 
-func (t *Tree) Name() string { return t.name }
-func (t *Tree) SetName(name string) {
+func (t *tree) Name() string { return t.name }
+
+func (t *tree) SetName(name string) {
 	assert.AssertF(name != "", "invalid name \"%s\"", name)
 	t.name = name
 }
-func (t *Tree) Comment() string           { return t.comment }
-func (t *Tree) SetComment(comment string) { t.comment = comment }
 
-func (t *Tree) Root() *rootNode { return t.root }
+func (t *tree) Comment() string           { return t.comment }
+func (t *tree) SetComment(comment string) { t.comment = comment }
+
+func (t *tree) Root() *rootNode { return t._root }
+
+func (t *tree) root() *rootNode { return t._root }
 
 type treeAsset struct {
 	entry *TreeEntry
 	once  *sync.Once
-	tree  *Tree
+	tree  *tree
 }
 
 type Framework struct {
@@ -345,7 +362,7 @@ func (s *Framework) Init(cfgPath string) error {
 		for _, entry := range config.TreeEntries {
 			var ta *treeAsset
 			if s.loadAll {
-				tree := new(Tree)
+				tree := new(tree)
 				path := path.Join(s.configPathRoot, entry.Path)
 				if err = s.DecodeXMLTreeFile(path, tree); err == nil {
 					if tree.Name() != entry.Name {
@@ -375,11 +392,11 @@ func (s *Framework) Init(cfgPath string) error {
 	return nil
 }
 
-func (s *Framework) loadTree(ta *treeAsset) (*Tree, error) {
+func (s *Framework) loadTree(ta *treeAsset) (*tree, error) {
 	var err error
 
 	ta.once.Do(func() {
-		tree := new(Tree)
+		tree := new(tree)
 
 		path := path.Join(s.configPathRoot, ta.entry.Path)
 		if err = s.DecodeXMLTreeFile(path, tree); err != nil {
@@ -402,7 +419,7 @@ func (s *Framework) loadTree(ta *treeAsset) (*Tree, error) {
 	}
 }
 
-func (s *Framework) GetOrLoadTree(name string) (*Tree, error) {
+func (s *Framework) GetOrLoadTree(name string) (Tree, error) {
 	if !s.initialized {
 		return nil, errors.New("bevtree framework uninitialized")
 	}
@@ -410,7 +427,7 @@ func (s *Framework) GetOrLoadTree(name string) (*Tree, error) {
 	return s.getOrLoadTree(name)
 }
 
-func (s *Framework) getOrLoadTree(name string) (*Tree, error) {
+func (s *Framework) getOrLoadTree(name string) (*tree, error) {
 	ta := s.treeAssets[name]
 	if ta == nil {
 		return nil, nil
@@ -419,7 +436,7 @@ func (s *Framework) getOrLoadTree(name string) (*Tree, error) {
 	if s.loadAll {
 		return ta.tree, nil
 	} else {
-		tree := (*Tree)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&ta.tree))))
+		tree := (*tree)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&ta.tree))))
 		if tree != nil {
 			return tree, nil
 		}

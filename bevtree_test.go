@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (s *Framework) addTree(tree *Tree) {
+func (s *Framework) addTree(tree *tree) {
 	if !s.initialized {
 		panic(errors.New("bevtree framework uninitialized"))
 	}
@@ -228,7 +228,7 @@ func newTest() *test {
 	return t
 }
 
-func (t *test) createTree(name string) *Tree {
+func (t *test) createTree(name string) *tree {
 	tree := NewTree(name)
 	t.framework.addTree(tree)
 	return tree
@@ -888,7 +888,7 @@ func TestWeightSelector(t *testing.T) {
 		4: 0.05,
 		5: 0.1,
 	}
-	tolerance := 0.01
+	tolerance := 0.015
 
 	for v, w := range valWeights {
 		vv := v

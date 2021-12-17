@@ -30,7 +30,7 @@ type nodeMeta struct {
 	creator func() Node
 
 	// task pool, used to cache unused tasks of node type type.
-	taskPool *pool
+	taskPool *taskPool
 }
 
 // Use creator to create node.
@@ -40,7 +40,7 @@ func (meta *nodeMeta) createNode() Node { return meta.creator() }
 // create a new task. Then, call the OnCreate method of it.
 func (meta *nodeMeta) createTask(node Node) Task {
 	assert.Assert(node != nil, "node nil")
-	task := meta.taskPool.get().(Task)
+	task := meta.taskPool.get()
 	task.OnCreate(node)
 	return task
 }
@@ -48,7 +48,6 @@ func (meta *nodeMeta) createTask(node Node) Task {
 // Destroy a task of this type of node. First, call the OnDestroy
 // method of the task. Then, put it to be cached to the pool.
 func (meta *nodeMeta) destroyTask(task Task) {
-	task.OnDestroy()
 	meta.taskPool.put(task)
 }
 
@@ -62,7 +61,7 @@ type bevMeta struct {
 }
 
 // Use creator to create behavior.
-func (meta *bevMeta) create() Bev {
+func (meta *bevMeta) createBev() Bev {
 	return meta.creator()
 }
 
@@ -118,7 +117,7 @@ func (m *meta) RegisterNodeType(nodeType NodeType, nodeCreator func() Node, task
 	meta := &nodeMeta{
 		typ:      nodeType,
 		creator:  nodeCreator,
-		taskPool: newPool(func() interface{} { return taskCreator() }),
+		taskPool: newTaskPool(taskCreator),
 	}
 
 	m.nodeMetas[nodeType] = meta

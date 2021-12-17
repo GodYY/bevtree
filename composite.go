@@ -6,8 +6,8 @@ import (
 	"github.com/GodYY/gutils/assert"
 )
 
-// The CompositeNode Interface represents the functions that
-// the composite nodes in behavior tree must implement.
+// The CompositeNode Interface represents the common functions that
+// the composite nodes in behavior tree need implement.
 type CompositeNode interface {
 	Node
 
@@ -93,8 +93,6 @@ func (s *sequenceTask) OnCreate(node Node) {
 	s.curChildIdx = 0
 }
 
-func (s *sequenceTask) OnDestroy() { s.node = nil }
-
 func (s *sequenceTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	if s.node.ChildCount() == 0 {
 		return false
@@ -105,7 +103,7 @@ func (s *sequenceTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 }
 
 func (s *sequenceTask) OnUpdate(ctx Context) Result { return Running }
-func (s *sequenceTask) OnTerminate(ctx Context)     {}
+func (s *sequenceTask) OnTerminate(ctx Context)     { s.node = nil }
 
 func (s *sequenceTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
 	s.curChildIdx++
@@ -150,8 +148,6 @@ func (s *selectorTask) OnCreate(node Node) {
 	s.curChildIdx = 0
 }
 
-func (s *selectorTask) OnDestroy() { s.node = nil }
-
 func (s *selectorTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	if s.node.ChildCount() == 0 {
 		return false
@@ -162,7 +158,7 @@ func (s *selectorTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 }
 
 func (s *selectorTask) OnUpdate(ctx Context) Result { return Running }
-func (s *selectorTask) OnTerminate(ctx Context)     {}
+func (s *selectorTask) OnTerminate(ctx Context)     { s.node = nil }
 
 func (s *selectorTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
 	s.curChildIdx++
@@ -238,11 +234,6 @@ func (s *randSequenceTask) OnCreate(node Node) {
 	s.curChildIdx = 0
 }
 
-func (s *randSequenceTask) OnDestroy() {
-	s.node = nil
-	s.childs = nil
-}
-
 func (s *randSequenceTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	if s.childs = genRandNodes(s.node.children); len(s.childs) == 0 {
 		return false
@@ -253,7 +244,10 @@ func (s *randSequenceTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 }
 
 func (s *randSequenceTask) OnUpdate(ctx Context) Result { return Running }
-func (s *randSequenceTask) OnTerminate(ctx Context)     {}
+func (s *randSequenceTask) OnTerminate(ctx Context) {
+	s.node = nil
+	s.childs = nil
+}
 
 func (s *randSequenceTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
 	s.curChildIdx++
@@ -300,11 +294,6 @@ func (s *randSelectorTask) OnCreate(node Node) {
 	s.curChildIdx = 0
 }
 
-func (s *randSelectorTask) OnDestroy() {
-	s.node = nil
-	s.childs = nil
-}
-
 func (s *randSelectorTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	s.childs = genRandNodes(s.node.children)
 	if len(s.childs) == 0 {
@@ -316,7 +305,10 @@ func (s *randSelectorTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 }
 
 func (s *randSelectorTask) OnUpdate(ctx Context) Result { return Running }
-func (s *randSelectorTask) OnTerminate(ctx Context)     {}
+func (s *randSelectorTask) OnTerminate(ctx Context) {
+	s.node = nil
+	s.childs = nil
+}
 
 func (s *randSelectorTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
 	s.curChildIdx++
@@ -359,19 +351,15 @@ func (n *WeightSelectorNode) AddChild(child Node, weight float32) {
 	assert.Assert(child.Parent() == nil, "child already has parent")
 	assert.Assert(weight > 0, "weight <= 0")
 
+	var w float32
+	for _, child := range n.children {
+		w += child.weight
+	}
+
+	assert.Assert(w+weight <= 1, "total weight > 1")
+
 	child.SetParent(n)
 	n.children = append(n.children, &weightNode{node: child, weight: weight})
-}
-
-func (n *WeightSelectorNode) ChildWeight(idx int) float32 {
-	assert.Assert(idx >= 0 && idx < n.ChildCount(), "index out of range")
-	return n.children[idx].weight
-}
-
-func (n *WeightSelectorNode) SetChildWeight(idx int, weight float32) {
-	assert.Assert(idx >= 0 && idx < n.ChildCount(), "index out of range")
-	assert.Assert(weight > 0, "weight <= 0")
-	n.children[idx].weight = weight
 }
 
 type weightSelectorTask struct {
@@ -387,11 +375,6 @@ func (t *weightSelectorTask) TaskType() TaskType {
 // node indicates the node on which the Task is created.
 func (t *weightSelectorTask) OnCreate(node Node) {
 	t.node = node.(*WeightSelectorNode)
-}
-
-// OnDestroy is called before the Task is destroyed.
-func (t *weightSelectorTask) OnDestroy() {
-	t.node = nil
 }
 
 // OnInit is called before the first update of the Task.
@@ -414,6 +397,12 @@ func (t *weightSelectorTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 		}
 	}
 
+	if 1-w < 1e-4 {
+		node, _ := t.node.Child(t.node.ChildCount() - 1)
+		nextChildNodes.PushNode(node)
+		return true
+	}
+
 	return false
 }
 
@@ -423,7 +412,7 @@ func (t *weightSelectorTask) OnUpdate(ctx Context) Result {
 }
 
 // OnTerminate is called after ths last update of the Task.
-func (t *weightSelectorTask) OnTerminate(ctx Context) {}
+func (t *weightSelectorTask) OnTerminate(ctx Context) { t.node = nil }
 
 // OnChildTerminated is called when a sub Task is terminated.
 //
@@ -469,8 +458,6 @@ func (p *parallelTask) OnCreate(node Node) {
 	p.completed = 0
 }
 
-func (p *parallelTask) OnDestroy() { p.node = nil }
-
 func (p *parallelTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	childCount := p.node.ChildCount()
 	if childCount == 0 {
@@ -485,7 +472,7 @@ func (p *parallelTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 }
 
 func (p *parallelTask) OnUpdate(ctx Context) Result { return Running }
-func (p *parallelTask) OnTerminate(ctx Context)     { p.completed = 0 }
+func (p *parallelTask) OnTerminate(ctx Context)     { p.node = nil }
 func (p *parallelTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
 	p.completed++
 

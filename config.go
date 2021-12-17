@@ -8,13 +8,21 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Tree resource entry.
 type TreeEntry struct {
+	// Tree name.
 	Name string `xml:"name,attr"`
+
+	// Tree path.
 	Path string `xml:"path,attr"`
 }
 
+// Framework config.
 type Config struct {
-	LoadAll     bool         `xml:"loadall"`
+	// Load all trees when initializing.
+	LoadAll bool `xml:"loadall"`
+
+	// Tree resource entries.
 	TreeEntries []*TreeEntry `xml:"bevtrees>bevtree"`
 }
 
@@ -77,17 +85,18 @@ func saveConfig(config *Config, path string) (err error) {
 	return nil
 }
 
+// The tool for exporting config and tree resources.
 type Exporter struct {
 	framework *Framework
 	config    *Config
-	trees     map[string]*Tree
+	trees     map[string]*tree
 }
 
 func NewExporter(fw *Framework) *Exporter {
 	return &Exporter{
 		framework: fw,
 		config:    &Config{},
-		trees:     map[string]*Tree{},
+		trees:     map[string]*tree{},
 	}
 }
 
@@ -95,7 +104,7 @@ func (e *Exporter) SetLoadAll(loadall bool) {
 	e.config.LoadAll = loadall
 }
 
-func (e *Exporter) AddTree(tree *Tree, path string) error {
+func (e *Exporter) AddTree(tree *tree, path string) error {
 	if tree == nil {
 		return nil
 	}

@@ -67,7 +67,6 @@ type inverterTask struct {
 
 func (i *inverterTask) TaskType() TaskType { return Serial }
 func (i *inverterTask) OnCreate(node Node) { i.node = node.(*InverterNode) }
-func (i *inverterTask) OnDestroy()         { i.node = nil }
 
 func (i *inverterTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	if i.node.Child() == nil {
@@ -79,7 +78,7 @@ func (i *inverterTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 }
 
 func (i *inverterTask) OnUpdate(ctx Context) Result { return Running }
-func (i *inverterTask) OnTerminate(ctx Context)     {}
+func (i *inverterTask) OnTerminate(ctx Context)     { i.node = nil }
 
 func (i *inverterTask) OnChildTerminated(result Result, _ NodeList, ctx Context) Result {
 	if result == Success {
@@ -113,7 +112,6 @@ type succeederTask struct {
 
 func (s *succeederTask) TaskType() TaskType { return Serial }
 func (s *succeederTask) OnCreate(node Node) { s.node = node.(*SucceederNode) }
-func (s *succeederTask) OnDestroy()         { s.node = nil }
 
 func (s *succeederTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	if s.node.Child() == nil {
@@ -125,7 +123,7 @@ func (s *succeederTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 }
 
 func (s *succeederTask) OnUpdate(ctx Context) Result { return Running }
-func (s *succeederTask) OnTerminate(ctx Context)     {}
+func (s *succeederTask) OnTerminate(ctx Context)     { s.node = nil }
 
 func (s *succeederTask) OnChildTerminated(result Result, _ NodeList, ctx Context) Result {
 	return Success
@@ -156,13 +154,6 @@ func (r *RepeaterNode) SetChild(child Node) {
 
 func (r *RepeaterNode) Limited() int { return r.limited }
 
-func (r *RepeaterNode) SetLimited(limited int) {
-	if r.limited <= 0 {
-		return
-	}
-	r.limited = limited
-}
-
 // Repeater node task.
 type repeaterTask struct {
 	node  *RepeaterNode
@@ -171,7 +162,6 @@ type repeaterTask struct {
 
 func (r *repeaterTask) TaskType() TaskType { return Serial }
 func (r *repeaterTask) OnCreate(node Node) { r.node = node.(*RepeaterNode); r.count = 0 }
-func (r *repeaterTask) OnDestroy()         { r.node = nil }
 
 func (r *repeaterTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	if r.node.Child() == nil {
@@ -183,7 +173,7 @@ func (r *repeaterTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 }
 
 func (r *repeaterTask) OnUpdate(ctx Context) Result { return Running }
-func (r *repeaterTask) OnTerminate(ctx Context)     {}
+func (r *repeaterTask) OnTerminate(ctx Context)     { r.node = nil }
 
 func (r *repeaterTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
 	r.count++
@@ -218,8 +208,7 @@ func (r *RepeatUntilFailNode) SetChild(child Node) {
 	}
 }
 
-func (r *RepeatUntilFailNode) SuccessOnFail() bool                 { return r.successOnFail }
-func (r *RepeatUntilFailNode) SetSuccessOnFail(successOnFail bool) { r.successOnFail = successOnFail }
+func (r *RepeatUntilFailNode) SuccessOnFail() bool { return r.successOnFail }
 
 // RepeatUntilFail node task.
 type repeatUntilFailTask struct {
@@ -228,7 +217,6 @@ type repeatUntilFailTask struct {
 
 func (r *repeatUntilFailTask) TaskType() TaskType { return Serial }
 func (r *repeatUntilFailTask) OnCreate(node Node) { r.node = node.(*RepeatUntilFailNode) }
-func (r *repeatUntilFailTask) OnDestroy()         { r.node = nil }
 
 func (r *repeatUntilFailTask) OnInit(nextChildNodes NodeList, ctx Context) bool {
 	if r.node.Child() == nil {
@@ -239,7 +227,7 @@ func (r *repeatUntilFailTask) OnInit(nextChildNodes NodeList, ctx Context) bool 
 	}
 }
 func (r *repeatUntilFailTask) OnUpdate(ctx Context) Result { return Running }
-func (r *repeatUntilFailTask) OnTerminate(ctx Context)     {}
+func (r *repeatUntilFailTask) OnTerminate(ctx Context)     { r.node = nil }
 
 func (r *repeatUntilFailTask) OnChildTerminated(result Result, nextChildNodes NodeList, ctx Context) Result {
 	if result == Success {

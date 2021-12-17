@@ -10,14 +10,14 @@ type SubtreeNode struct {
 	node
 
 	// The subtree.
-	subtree *Tree
+	subtree Tree
 
 	// Whether to create a independent dataset. If set to true,
 	// the behavior tree do not share dataset with subtree.
 	independentDataSet bool
 }
 
-func NewSubtreeNode(subtree *Tree, independentDataSet bool) *SubtreeNode {
+func NewSubtreeNode(subtree Tree, independentDataSet bool) *SubtreeNode {
 	assert.Assert(subtree != nil, "subtree nil")
 	return &SubtreeNode{
 		node:               newNode(),
@@ -28,18 +28,9 @@ func NewSubtreeNode(subtree *Tree, independentDataSet bool) *SubtreeNode {
 
 func (s *SubtreeNode) NodeType() NodeType { return subtree }
 
-func (s *SubtreeNode) Subtree() *Tree { return s.subtree }
-
-func (s *SubtreeNode) SetSubtree(subtree *Tree) {
-	assert.Assert(subtree != nil, "subtree nil")
-	s.subtree = subtree
-}
+func (s *SubtreeNode) Subtree() Tree { return s.subtree }
 
 func (s *SubtreeNode) IndependentDataSet() bool { return s.independentDataSet }
-
-func (s *SubtreeNode) SetIndependentDataSet(independentDataSet bool) {
-	s.independentDataSet = independentDataSet
-}
 
 type subtreeTask struct {
 	node   *SubtreeNode
@@ -49,19 +40,16 @@ type subtreeTask struct {
 // Get the TaskType.
 func (s *subtreeTask) TaskType() TaskType { return Single }
 
-// OnCreate is called immediately after the Task is created.
-// node indicates the node on which the Task is created.
-func (s *subtreeTask) OnCreate(node Node) { s.node = node.(*SubtreeNode) }
-
-// OnDestroy is called before the Task is destroyed.
-func (s *subtreeTask) OnDestroy() { s.node = nil }
+func (s *subtreeTask) OnCreate(node Node) {
+	s.node = node.(*SubtreeNode)
+}
 
 // OnInit is called before the first update of the Task.
 // nextChildNodes is used to return the child nodes that need
 // to run next. ctx represents the running context of the
 // behavior tree.
 func (s *subtreeTask) OnInit(_ NodeList, ctx Context) bool {
-	s.entity = newEntity(ctx.(*context).cloneWithTree(s.node.subtree, s.node.independentDataSet))
+	s.entity = newEntity(ctx.cloneWithTree(s.node.subtree, s.node.independentDataSet))
 	return true
 }
 
@@ -76,6 +64,7 @@ func (s *subtreeTask) OnTerminate(ctx Context) {
 		s.entity.Release()
 		s.entity = nil
 	}
+	s.node = nil
 }
 
 // OnChildTerminated is called when a sub Task is terminated.

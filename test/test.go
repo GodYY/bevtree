@@ -193,22 +193,26 @@ func main() {
 
 	tree := NewTree("test subtree")
 
-	parallel := NewParallelNode()
-	tree.Root().SetChild(parallel)
+	// parallel := NewParallelNode()
+	// tree.Root().SetChild(parallel)
+
+	weightSelector := NewWeightSelectorNode()
+	tree.Root().SetChild(weightSelector)
 
 	key := "key"
-	sum := 0
+	// sum := 0
 	unit := 1
 	low := 5
 	max := 10
 
 	rand.Seed(time.Now().UnixNano())
 
+	sum_a := 0
 	{
 		subtree_a := NewTree("subtree_a")
 		exporter.AddTree(subtree_a, "subtree_a.xml")
 
-		parallel.AddChild(NewSubtreeNode(subtree_a, false))
+		weightSelector.AddChild(NewSubtreeNode(subtree_a, false), 0.199)
 		paral := NewParallelNode()
 		subtree_a.Root().SetChild(paral)
 
@@ -217,27 +221,27 @@ func main() {
 		sc := NewSucceederNode()
 		sc.SetChild(NewBevNode(bd))
 		paral.AddChild(sc)
-		sum += unit
+		sum_a += unit
 
 		rtimes := low + rand.Intn(max-low+1)
 		r := NewRepeaterNode(rtimes)
 		r.SetChild(NewBevNode(bd))
 		paral.AddChild(r)
-		sum += rtimes * unit
+		sum_a += rtimes * unit
 
 		iv_sc := NewSucceederNode()
 		iv := NewInverterNode()
 		iv.SetChild(NewBevNode(bd))
 		iv_sc.SetChild(iv)
 		paral.AddChild(iv_sc)
-		sum += unit
+		sum_a += unit
 
 		ruf := NewRepeatUntilFailNode(true)
 		ruf_iv := NewInverterNode()
 		ruf.SetChild(ruf_iv)
 		ruf_iv.SetChild(NewBevNode(bd))
 		paral.AddChild(ruf)
-		sum += unit
+		sum_a += unit
 
 		seqTimes := low + rand.Intn(max-low+1)
 		seq := NewSequenceNode()
@@ -245,7 +249,7 @@ func main() {
 			seq.AddChild(NewBevNode(bd))
 		}
 		paral.AddChild(seq)
-		sum += seqTimes * unit
+		sum_a += seqTimes * unit
 
 		selcTimes := low + rand.Intn(max-low+1)
 		selc := NewSelectorNode()
@@ -260,14 +264,15 @@ func main() {
 			}
 		}
 		paral.AddChild(selc)
-		sum += (selcSuccN + 1) * unit
+		sum_a += (selcSuccN + 1) * unit
 	}
 
+	sum_b := 0
 	{
 		subtree_b := NewTree("subtree_b")
 		exporter.AddTree(subtree_b, "subtree_b.xml")
 
-		parallel.AddChild(NewSubtreeNode(subtree_b, false))
+		weightSelector.AddChild(NewSubtreeNode(subtree_b, false), 0.801)
 		paral := NewParallelNode()
 		subtree_b.Root().SetChild(paral)
 
@@ -276,27 +281,27 @@ func main() {
 		sc := NewSucceederNode()
 		sc.SetChild(NewBevNode(bd))
 		paral.AddChild(sc)
-		sum += unit
+		sum_b += unit
 
 		rtimes := low + rand.Intn(max-low+1)
 		r := NewRepeaterNode(rtimes)
 		r.SetChild(NewBevNode(bd))
 		paral.AddChild(r)
-		sum += rtimes * unit
+		sum_b += rtimes * unit
 
 		iv_sc := NewSucceederNode()
 		iv := NewInverterNode()
 		iv.SetChild(NewBevNode(bd))
 		iv_sc.SetChild(iv)
 		paral.AddChild(iv_sc)
-		sum += unit
+		sum_b += unit
 
 		ruf := NewRepeatUntilFailNode(true)
 		ruf_iv := NewInverterNode()
 		ruf.SetChild(ruf_iv)
 		ruf_iv.SetChild(NewBevNode(bd))
 		paral.AddChild(ruf)
-		sum += unit
+		sum_b += unit
 
 		seqTimes := low + rand.Intn(max-low+1)
 		seq := NewSequenceNode()
@@ -304,7 +309,7 @@ func main() {
 			seq.AddChild(NewBevNode(bd))
 		}
 		paral.AddChild(seq)
-		sum += seqTimes * unit
+		sum_b += seqTimes * unit
 
 		selcTimes := low + rand.Intn(max-low+1)
 		selc := NewSelectorNode()
@@ -319,7 +324,7 @@ func main() {
 			}
 		}
 		paral.AddChild(selc)
-		sum += (selcSuccN + 1) * unit
+		sum_b += (selcSuccN + 1) * unit
 	}
 
 	exporter.AddTree(tree, "test_subtree.xml")
@@ -341,10 +346,10 @@ func main() {
 	entity.Update()
 	if val, ok := entity.Context().DataSet().GetInt(key); !ok {
 		log.Fatal("value not exist")
-	} else if val != sum {
-		log.Fatalf("val(%d) != sum(%d)", val, sum)
+	} else if val != sum_a && val != sum_b && val != 0 {
+		log.Fatalf("val(%d) != [%d, %d, 0]", val, sum_a, sum_b)
 	} else {
-		// fmt.Println(val, sum)
+		fmt.Println(val, sum_a, sum_b)
 		fmt.Println("success")
 	}
 

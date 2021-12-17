@@ -11,11 +11,8 @@ import (
 
 // Context interface.
 type Context interface {
-	// Behavior tree framework.
-	Framework() *Framework
-
 	// Behavior tree
-	Tree() *Tree
+	Tree() Tree
 
 	// Get user data.
 	UserData() interface{}
@@ -25,23 +22,41 @@ type Context interface {
 
 	// Get data-set.
 	DataSet() DataSet
+
+	// Get Framework.
+	framework() *Framework
+
+	// Release the Context.
+	release()
+
+	// Reset the Context.
+	reset()
+
+	// Update.
+	update()
+
+	cloneWithTree(tree Tree, independentDataSet bool) Context
+
+	internal
 }
 
 type context struct {
-	framework    *Framework
-	tree         *Tree
+	_framework   *Framework
+	tree         Tree
 	userData     interface{}
 	updateSeri   uint32
 	dataSet      *dataSet
 	dataSetOwner bool
+
+	internalImpl
 }
 
-func newContext(framework *Framework, tree *Tree, userData interface{}) *context {
+func newContext(framework *Framework, tree Tree, userData interface{}) *context {
 	assert.Assert(framework != nil, "framework nil")
 	assert.Assert(tree != nil, "tree nil")
 
 	ctx := &context{
-		framework:    framework,
+		_framework:   framework,
 		tree:         tree,
 		userData:     userData,
 		dataSet:      newDataSet(),
@@ -51,9 +66,9 @@ func newContext(framework *Framework, tree *Tree, userData interface{}) *context
 	return ctx
 }
 
-func (ctx *context) Framework() *Framework { return ctx.framework }
+func (ctx *context) framework() *Framework { return ctx._framework }
 
-func (ctx *context) Tree() *Tree { return ctx.tree }
+func (ctx *context) Tree() Tree { return ctx.tree }
 
 func (ctx *context) UserData() interface{} { return ctx.userData }
 
@@ -68,7 +83,6 @@ func (ctx *context) release() {
 	ctx.dataSet = nil
 	ctx.userData = nil
 	ctx.tree = nil
-	ctx.framework = nil
 }
 
 func (ctx *context) reset() {
@@ -80,11 +94,11 @@ func (ctx *context) reset() {
 
 func (ctx *context) update() { ctx.updateSeri++ }
 
-func (ctx *context) cloneWithTree(tree *Tree, independentDataSet bool) *context {
+func (ctx *context) cloneWithTree(tree Tree, independentDataSet bool) Context {
 	assert.Assert(tree != nil, "tree nil")
 
 	cp := &context{
-		framework:  ctx.framework,
+		_framework: ctx._framework,
 		tree:       tree,
 		userData:   ctx.userData,
 		updateSeri: ctx.updateSeri,

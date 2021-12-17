@@ -71,12 +71,6 @@ func (b *bevTask) OnCreate(node Node) {
 	b.bevInst = b.bev.CreateInstance()
 }
 
-func (b *bevTask) OnDestroy() {
-	b.bev.DestroyInstance(b.bevInst)
-	b.bevInst = nil
-	b.bev = nil
-}
-
 func (b *bevTask) OnInit(_ NodeList, ctx Context) bool {
 	return b.bevInst.OnInit(ctx)
 }
@@ -87,6 +81,9 @@ func (b *bevTask) OnUpdate(ctx Context) Result {
 
 func (b *bevTask) OnTerminate(ctx Context) {
 	b.bevInst.OnTerminate(ctx)
+	b.bev.DestroyInstance(b.bevInst)
+	b.bevInst = nil
+	b.bev = nil
 }
 
 func (b *bevTask) OnChildTerminated(Result, NodeList, Context) Result { panic("shouldnt be invoked") }
